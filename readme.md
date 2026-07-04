@@ -3,10 +3,10 @@
 ## 项目介绍 (Project Introduction)
 
 ### 中文
-这是一个为 Koishi 机器人框架开发的**全平台视频/图集解析插件**，使用统一API接口，支持自动识别并解析抖音、快手、B站、小红书、微博、YouTube、TikTok、剪映、AcFun、知乎、虎牙、绿洲、视频号等20+主流平台的短视频/图集/实况链接。
+这是一个为 Koishi 机器人框架开发的**全平台视频/图集解析插件**，使用统一API接口，支持自动识别并解析抖音、快手、B站、小红书、微博、西瓜视频、YouTube、TikTok、AcFun（A站）、知乎、微视、虎牙、好看视频、美拍、Twitter/X、Instagram、豆包（视频/图集）、**即梦（AI视频/图片）**、绿洲、视频号、梨视频、全民直播、皮皮搞笑、皮皮虾、最右等**20+主流平台**的短视频/图集/实况链接。
 
 ### English
-This is a **multi-platform video/image parsing plugin** developed for the Koishi bot framework, using a unified API interface to automatically recognize and parse short video/image/live photo links from 20+ mainstream platforms such as Douyin, Kuaishou, Bilibili, Xiaohongshu, Weibo, YouTube, TikTok, Jianying, AcFun, Zhihu, Huya, Oasis, WeChat Channels and more.
+This is a **multi-platform video/image parsing plugin** developed for the Koishi bot framework, using a unified API interface to automatically recognize and parse short video/image/live photo links from **20+ mainstream platforms** such as Douyin, Kuaishou, Bilibili, Xiaohongshu, Weibo, Xigua, YouTube, TikTok, AcFun, Zhihu, Weishi, Huya, Haokan, Meipai, Twitter/X, Instagram, Doubao (video/images), **Jimeng (AI video/image)**, Oasis, WeChat Channels, Lishi, Quanmin, Pipigx, Pipixia, Zuiyou and more.
 
 ## 项目仓库 (Repository)
 - GitHub: `https://github.com/Minecraft-1314/koishi-plugin-video-parser-all`
@@ -143,34 +143,38 @@ This is a **multi-platform video/image parsing plugin** developed for the Koishi
 若启用 `downloadEngine: 'downloads'`，请安装可选依赖 `koishi-plugin-downloads`，失败时回退到内置下载。
 
 ## 支持的平台 (Supported Platforms)
-| 平台名称 | 关键词识别 | 解析能力 |
-|----------|------------|----------|
-| 哔哩哔哩 (B站) | bilibili, b23.tv, bilibili.com | 视频 |
-| 抖音 | douyin, v.douyin.com | 短视频、图集、实况 |
-| 快手 | kuaishou, v.kuaishou.com | 短视频、图集 |
-| 小红书 | xiaohongshu, xhslink.com | 图文、视频 |
-| 微博 | weibo, video.weibo.com | 视频、图集 |
-| 剪映 / 即梦 | jianying, jimeng.jianying.com | 视频模板 |
-| 今日头条 / 西瓜视频 | toutiao, ixigua.com | 短视频 |
-| AcFun（A站） | acfun, acfun.cn | 视频 |
-| 知乎 | zhihu, zhihu.com | 视频、回答 |
-| 微视 | weishi, weishi.qq.com | 短视频 |
-| 虎牙 | huya, huya.com | 直播、视频 |
-| YouTube（油管） | youtube, youtu.be | 视频 |
-| TikTok（国际版抖音） | tiktok, tiktok.com | 短视频 |
-| 好看视频 | haokan, haokan.baidu.com | 短视频 |
-| 美拍 | meipai, meipai.com | 短视频 |
-| Twitter / X | twitter, x.com | 视频、图文 |
-| Instagram | instagram, instagram.com | 图文、Reels |
-| 豆包 | doubao (doubao.com/video) | 视频 |
-| 皮皮搞笑 | pipigx, h5.pipigx.com | 短视频 |
-| 皮皮虾 | pipixia, h5.pipix.com | 短视频 |
-| 最右 | zuiyou, xiaochuankeji.cn | 短视频 |
-| 梨视频 | video.li, pearvideo.com | 短视频 |
-| 全民直播 | quanmin (quanmin.tv) | 直播 |
-| 绿洲 (Oasis) | oasis.weibo.com | 视频、图文 |
-| 视频号 (WeChat Channels) | channels.weixin.qq.com, weixin.qq.com/sph/ | 短视频 |
-| 🔧 自定义平台 | 通过 `customPlatforms` 添加 | 取决于 API |
+
+> 以下为插件内置链接匹配规则，可根据用户发送的链接自动识别。所有匹配规则同时支持 HTTP 和 HTTPS 协议，并兼容多级路径（如短链后带 `/` 子路径）。
+
+| 平台名称 | 关键词识别（匹配的域名/路径模式） | 解析能力 |
+|----------|----------------------------------|----------|
+| 哔哩哔哩 (B站) | `bilibili.com/video/`, `b23.tv`, `bili*.cn`, `b23.wtf`, `bili2233.cn` | 视频 |
+| 抖音 | `douyin.com/video/`, `v.douyin.com` | 短视频、图集、实况 |
+| 快手 | `kuaishou.com/short-video/`, `v.kuaishou.com`, `kuaishou.com/f/` | 短视频、图集 |
+| 小红书 | `xiaohongshu.com/discovery/item/`, `xhslink.com`（含多级路径）, `xiaohongshu.com/explore/`, `xiaohongshu.com/board/` | 图文、视频 |
+| 微博 | `weibo.com/数字/`, `video.weibo.com/show`, `t.cn`, `m.weibo.cn` | 视频、图集 |
+| 西瓜视频 | `ixigua.com` | 短视频 |
+| YouTube | `youtube.com/watch`, `youtu.be`, `youtube.com/shorts/` | 视频 |
+| TikTok | `tiktok.com/@/video/`, `vm.tiktok.com`, `vt.tiktok.com` | 短视频 |
+| AcFun（A站） | `acfun.cn/v/ac` | 视频 |
+| 知乎 | `zhihu.com/video/`, `zhihu.com/question/xxx/answer/xxx`, `zhuanlan.zhihu.com/p/`, `zhihu.com/zvideo/` | 视频、回答中的视频 |
+| 微视 | `weishi.qq.com/weishi/feed/` | 短视频 |
+| 虎牙 | `huya.com/video/` | 直播回放、视频 |
+| 好看视频 | `haokan.baidu.com/v?vid=` | 短视频 |
+| 美拍 | `meipai.com/media/` | 短视频 |
+| Twitter / X | `twitter.com/用户名/status/`, `x.com/用户名/status/` | 视频、图文 |
+| Instagram | `instagram.com/p/`, `instagram.com/reel/`, `instagram.com/share/` | 图文、Reels |
+| 豆包（视频） | `doubao.com/video/`, `doubao.com/video-sharing` | 视频 |
+| 豆包（图集） | `doubao.com/thread/` | 图文 |
+| **即梦 (Jimeng)** | `jimeng.jianying.com`, `jimeng.cn`, `dreamina.jianying.com`, `dreamina.capcut.com` | AI视频、AI图片 |
+| 绿洲 (Oasis) | `oasis.weibo.com/v/` | 视频、图文 |
+| 视频号 (WeChat Channels) | `channels.weixin.qq.com`, `weixin.qq.com/sph/` | 短视频 |
+| 梨视频 | `pearvideo.com/video_`, `video.li` | 短视频 |
+| 全民直播 | `quanmin.tv`, `quanmintv.cn` | 直播 |
+| 皮皮搞笑 | `h5.pipigx.com/pp/post/`, `ippzone.com` | 短视频 |
+| 皮皮虾 | `pipix.com`, `pipixia.com` | 短视频 |
+| 最右 | `share.xiaochuankeji.cn/hybrid/share/post`, `izuiyou.com` | 短视频 |
+| 🔧 自定义平台 | 通过 `customPlatforms` 配置添加 | 取决于提供的 API |
 
 ## 项目贡献者 (Contributors)
 
