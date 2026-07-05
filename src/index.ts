@@ -1348,3 +1348,5 @@ export function apply(ctx: Context, config: any) {
 
   debugLog('INFO', '插件初始化完成')
 }
+
+apply.inject = ['aria2', 'downloads']
