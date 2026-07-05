@@ -61,10 +61,6 @@ This is a **multi-platform video/image parsing plugin** developed for the Koishi
 | `mediaDownloadTimeout` | number | 120000 | 统一下载超时 (ms) |
 | `maxMediaSize` | number | 0 | 最大下载文件大小 (MB)，0 为不限制 |
 | `downloadEngine` | string | internal | 下载引擎（internal / aria2 / downloads） |
-| `aria2Host` | string | 127.0.0.1 | aria2 RPC 地址 |
-| `aria2Port` | number | 6800 | aria2 RPC 端口 |
-| `aria2Secret` | string |  | aria2 RPC 密钥 |
-| `resumeDownload` | boolean | true | 启用断点续传（仅 aria2） |
 
 ### 网络与请求
 | 配置项 | 类型 | 默认值 | 说明 |
@@ -134,11 +130,7 @@ This is a **multi-platform video/image parsing plugin** developed for the Koishi
 - `koishi-plugin-silk`：silk 编解码
 - `koishi-plugin-ffmpeg`：音频重采样
 ### aria2 下载引擎（可选）
-若启用 `downloadEngine: 'aria2'`，请安装并启动 aria2 服务，并安装 npm 包 `aria2`：
-- 安装 aria2 服务端：https://github.com/aria2/aria2
-- 安装 npm 客户端：`npm install aria2`
-- 启动 RPC：`aria2c --enable-rpc --rpc-listen-all=true --rpc-allow-origin-all`
-未满足条件时自动降级为内置下载，不影响正常使用。
+若启用 `downloadEngine: 'aria2'`，请安装可选依赖 `koishi-plugin-aria2-plus` 并配置该插件连接 aria2 服务。插件启动时会自动检测该服务，未安装或不可用时将降级为内置下载，不影响正常使用。
 ### downloads 服务（可选）
 若启用 `downloadEngine: 'downloads'`，请安装可选依赖 `koishi-plugin-downloads`，失败时回退到内置下载。
 
