@@ -95,7 +95,7 @@ export const Config = Schema.intersect([
   Schema.object({
     unifiedMessageFormat: Schema.string().role('textarea').default(
       '标题：${标题}\n作者：${作者}\n简介：${简介}\n音乐标题：${音乐标题}\n音乐作者：${音乐作者}\n点赞：${点赞数}\n收藏：${收藏数}\n转发：${转发数}\n播放：${播放数}\n评论：${评论数}\n图片数量：${图片数量}'
-    ).description('文字格式，支持变量：${标题} ${作者} ${author-name} ${简介} ${视频时长} ${点赞数} ${收藏数} ${转发数} ${播放数} ${评论数} ${发布时间} ${图片数量} ${作者ID} ${author-id} ${音乐标题} ${music-title} ${音乐作者} ${music-author}，空行自动隐藏'),
+    ).description('文字格式，支持变量：${标题} ${作者} ${简介} ${视频时长} ${点赞数} ${收藏数} ${转发数} ${播放数} ${评论数} ${发布时间} ${图片数量} ${作者ID} ${音乐标题} ${音乐作者}，空行自动隐藏'),
   }).description('消息格式'),
 
   Schema.object({
@@ -706,7 +706,6 @@ function generateFormattedText(p: ParsedData, format: string): string {
   const vars: Record<string, string> = {
     '标题': p.title,
     '作者': p.author,
-    'author-name': p.author,
     '简介': p.desc,
     '视频时长': p.duration > 0 ? formatDuration(p.duration) : '',
     '点赞数': String(p.like),
@@ -717,11 +716,8 @@ function generateFormattedText(p: ParsedData, format: string): string {
     '发布时间': p.publishTime ? formatPublishTime(p.publishTime) : '',
     '图片数量': String(imageCount),
     '作者ID': p.uid,
-    'author-id': p.uid,
     '音乐标题': p.music.title || '',
-    'music-title': p.music.title || '',
     '音乐作者': p.music.author || '',
-    'music-author': p.music.author || '',
   }
 
   const varReplacements = Object.entries(vars).map(([key, val]) => ({
@@ -962,7 +958,7 @@ export function apply(ctx: Context, config: any) {
               lastProgressTime = Date.now()
               const total = parseInt(status.totalLength) || 0
               const completed = parseInt(status.completedLength) || 0
-              const percent = total > 0 ? Math.round((completed / total) * 100) : 0
+              const percent = total > 0 ? Math.round((completed / total) * 100) : -1
               const speed = formatSpeed(parseInt(status.downloadSpeed) || 0)
               onProgress(percent, speed)
             }
@@ -1008,15 +1004,25 @@ export function apply(ctx: Context, config: any) {
     let lastProgressTime = 0
     response.data.on('data', (chunk: Buffer) => {
       downloaded += chunk.length
-      if (onProgress && contentLength > 0 && Date.now() - lastProgressTime > 500) {
+      if (onProgress && Date.now() - lastProgressTime > 500) {
         lastProgressTime = Date.now()
-        const percent = Math.round((downloaded / contentLength) * 100)
-        onProgress(percent, '')
+        if (contentLength > 0) {
+          const percent = Math.round((downloaded / contentLength) * 100)
+          onProgress(percent, '')
+        } else {
+          onProgress(-1, formatSpeed(downloaded / ((Date.now() - lastProgressTime) / 1000)))
+        }
       }
     })
     try {
       await pipeline(response.data, writer)
-      if (onProgress) onProgress(100, '')
+      if (onProgress) {
+        if (contentLength > 0) {
+          onProgress(100, '')
+        } else {
+          onProgress(-1, formatSpeed(downloaded / ((Date.now() - lastProgressTime) / 1000)))
+        }
+      }
       return filePath
     } catch (e) {
       await fs.unlink(filePath).catch(() => {})
@@ -1056,8 +1062,12 @@ export function apply(ctx: Context, config: any) {
       const sendFunc = type === 'audio' ? h.audio : type === 'video' ? h.video : h.image
 
       const onProgress = forceDownload ? (percent: number, speed: string) => {
-        const text = `下载进度: ${percent}%` + (speed ? ` (${speed})` : '')
-        logger.info(text)
+        if (percent === -1) {
+          logger.info(`下载进度: 已下载 ${speed}`)
+        } else {
+          const text = `下载进度: ${percent}%` + (speed ? ` (${speed})` : '')
+          logger.info(text)
+        }
       } : undefined
 
       if (forceDownload) {
