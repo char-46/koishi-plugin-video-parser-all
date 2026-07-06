@@ -39,11 +39,20 @@ This is a **multi-platform video/image parsing plugin** developed for the Koishi
 |--------|------|--------|------|
 | `showImageText` | boolean | true | 发送文字内容 |
 | `showCoverImage` | boolean | true | 发送封面图片 |
-| `showMusicCover` | boolean | true | 发送音乐封面 |
-| `showImageFile` | boolean | true | 封面/图片是否以图片形式发送（关闭则只发送链接） |
+| `showCoverFile` | boolean | true | 封面是否以图片形式发送（关闭则只发送链接） |
+| `showImageFileNew` | boolean | true | 图片是否以图片形式发送（关闭则只发送链接） |
+| `showAuthorAvatar` | boolean | true | 发送作者头像图片 |
+| `showAuthorAvatarFile` | boolean | true | 作者头像图片是否以图片形式发送（关闭则只发送链接） |
+| `showMusicCover` | boolean | true | 发送音乐封面图片 |
 | `showVideoFile` | boolean | true | 视频是否以视频形式发送（关闭则只发送链接） |
-| `forceDownloadImage` | boolean | false | 强制下载封面/图片 |
+| `forceDownloadCover` | boolean | false | 强制下载封面 |
+| `forceDownloadImageNew` | boolean | false | 强制下载图片 |
+| `forceDownloadAuthorAvatar` | boolean | false | 强制下载作者头像 |
 | `forceDownloadVideo` | boolean | false | 强制下载视频 |
+| `forceDownloadAuthorAvatar` | boolean | false | 强制下载作者头像 |
+| `forceDownloadVideo` | boolean | false | 强制下载视频 |
+| `showAuthorAvatarText` | boolean | true | 发送作者头像前显示文字提示 |
+| `authorAvatarText` | string | 作者头像： | 作者头像前显示的文字 |
 
 ### 音乐语音（需 silk 和 ffmpeg）
 | 配置项 | 类型 | 默认值 | 说明 |
@@ -109,7 +118,7 @@ This is a **multi-platform video/image parsing plugin** developed for the Koishi
 | 变量名 | 说明 |
 |--------|------|
 | `${标题}` | 视频/图集标题 |
-| `${作者}` | 作者名称 |
+| `${作者}` 或 `${author-name}` | 作者名称 |
 | `${简介}` | 内容简介 |
 | `${视频时长}` | 视频时长（时:分:秒） |
 | `${点赞数}` | 点赞数量 |
@@ -119,10 +128,9 @@ This is a **multi-platform video/image parsing plugin** developed for the Koishi
 | `${评论数}` | 评论数量 |
 | `${发布时间}` | 发布时间（格式化） |
 | `${图片数量}` | 图集/实况图片数量 |
-| `${作者ID}` | 作者唯一标识ID |
-| `${视频链接}` | 视频原始链接 |
-| `${音乐标题}` | 音乐标题 |
-| `${音乐作者}` | 音乐作者 |
+| `${作者ID}` 或 `${author-id}` | 作者唯一标识ID |
+| `${音乐标题}` 或 `${music-title}` | 音乐标题 |
+| `${音乐作者}` 或 `${music-author}` | 音乐作者 |
 
 ## 依赖说明 (Dependencies)
 ### 音乐语音（可选）
@@ -166,7 +174,7 @@ This is a **multi-platform video/image parsing plugin** developed for the Koishi
 | 皮皮搞笑 | `h5.pipigx.com/pp/post/`, `ippzone.com` | 短视频 |
 | 皮皮虾 | `pipix.com`, `pipixia.com` | 短视频 |
 | 最右 | `share.xiaochuankeji.cn/hybrid/share/post`, `izuiyou.com` | 短视频 |
-| 🔧 自定义平台 | 通过 `customPlatforms` 配置添加 | 取决于提供的 API |
+| 自定义平台 | 通过 `customPlatforms` 配置添加 | 取决于提供的 API |
 
 ## 项目贡献者 (Contributors)
 
@@ -179,6 +187,7 @@ This is a **multi-platform video/image parsing plugin** developed for the Koishi
 | dzt2008 + Apricityx | 提交Bug-会对非支持视频平台URL进行误解析-已修复 |
 | JH-Ahua | BugPk-Api 支持 |
 | shangxue | 灵感来源 |
+| linyves | 提交Bug-小红书图集重复发送封面-已修复<br>提交Bug-话题显示异常 #**[话题]#-已修复<br>提交建议-Live Photo 全部按普通图片处理-已采纳<br>提交Bug-解析后会把作者头像一起发送-已修复 |
 
 （欢迎通过 Issues 或 PR 加入贡献者列表）
 

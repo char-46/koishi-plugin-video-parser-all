@@ -6,15 +6,6 @@ import { createWriteStream } from 'fs'
 import { pipeline } from 'stream/promises'
 import { randomBytes } from 'crypto'
 
-declare module 'koishi' {
-  interface Context {
-    downloads?: {
-      download(url: string, dest: string, options?: Record<string, unknown>): Promise<string>
-    }
-    aria2?: any
-  }
-}
-
 class SimpleLRUCache<V> {
   private map = new Map<string, { value: V; expireAt: number }>()
   constructor(private max: number, private ttlMs: number) {}
@@ -104,16 +95,23 @@ export const Config = Schema.intersect([
   Schema.object({
     unifiedMessageFormat: Schema.string().role('textarea').default(
       '标题：${标题}\n作者：${作者}\n简介：${简介}\n音乐标题：${音乐标题}\n音乐作者：${音乐作者}\n点赞：${点赞数}\n收藏：${收藏数}\n转发：${转发数}\n播放：${播放数}\n评论：${评论数}\n图片数量：${图片数量}'
-    ).description('文字格式，支持变量，空行自动隐藏'),
+    ).description('文字格式，支持变量：${标题} ${作者} ${author-name} ${简介} ${视频时长} ${点赞数} ${收藏数} ${转发数} ${播放数} ${评论数} ${发布时间} ${图片数量} ${作者ID} ${author-id} ${音乐标题} ${music-title} ${音乐作者} ${music-author}，空行自动隐藏'),
   }).description('消息格式'),
 
   Schema.object({
     showImageText: Schema.boolean().default(true).description('发送文字内容'),
     showCoverImage: Schema.boolean().default(true).description('发送封面图片'),
+    showCoverFile: Schema.boolean().default(true).description('封面是否以图片形式发送（关闭则只发送链接）'),
+    showImageFileNew: Schema.boolean().default(true).description('图片是否以图片形式发送（关闭则只发送链接）'),
+    showAuthorAvatar: Schema.boolean().default(true).description('发送作者头像图片'),
+    showAuthorAvatarFile: Schema.boolean().default(true).description('作者头像图片是否以图片形式发送（关闭则只发送链接）'),
+    showAuthorAvatarText: Schema.boolean().default(true).description('发送作者头像前显示文字提示'),
+    authorAvatarText: Schema.string().default('作者头像：').description('作者头像前显示的文字'),
     showMusicCover: Schema.boolean().default(true).description('发送音乐封面图片'),
-    showImageFile: Schema.boolean().default(true).description('封面/图片是否以图片形式发送（关闭则只发送链接）'),
     showVideoFile: Schema.boolean().default(true).description('视频是否以视频形式发送（关闭则只发送链接）'),
-    forceDownloadImage: Schema.boolean().default(false).description('强制下载封面/图片'),
+    forceDownloadCover: Schema.boolean().default(false).description('强制下载封面'),
+    forceDownloadImageNew: Schema.boolean().default(false).description('强制下载图片'),
+    forceDownloadAuthorAvatar: Schema.boolean().default(false).description('强制下载作者头像'),
     forceDownloadVideo: Schema.boolean().default(false).description('强制下载视频'),
   }).description('媒体发送'),
 
@@ -329,6 +327,9 @@ interface ParsedData {
   play: number
   duration: number
   publishTime: number
+  author_followers: number
+  author_signature: string
+  admire: number
 }
 
 interface LinkMatch {
@@ -604,8 +605,8 @@ function parseApiResponse(raw: any, maxDescLen: number, fieldMapping?: Record<st
     avatar = mapField('avatar', () => data.avatar || '')
   }
 
-  const title = mapField('title', () => data.title || '')
-  const desc = (mapField('desc', () => data.desc || data.description || '') as string).slice(0, maxDescLen).trim()
+  let title = mapField('title', () => data.title || '')
+  let desc = (mapField('desc', () => data.desc || data.description || '') as string).slice(0, maxDescLen).trim()
   const coverRaw = mapField('cover', () => data.cover || '')
   const cover = coverRaw ? (String(coverRaw).startsWith('http') ? String(coverRaw) : 'https:' + coverRaw) : ''
 
@@ -682,7 +683,21 @@ function parseApiResponse(raw: any, maxDescLen: number, fieldMapping?: Record<st
     publishTime = Number(extra.create_time) * 1000
   }
 
-  return { type, title, desc, author, uid, avatar, cover, video, videos, images, live_photo, music, like, comment, collect, share, play, duration, publishTime }
+  const author_followers = parseCount(mapField('author_followers', () => extra.author_extra?.follower_count ?? data.author_extra?.follower_count ?? 0))
+  const author_signature = String(mapField('author_signature', () => extra.author_extra?.signature ?? data.author_extra?.signature ?? ''))
+  const admire = parseCount(mapField('admire', () => extra.statistics?.admire_count ?? data.statistics?.admire_count ?? 0))
+
+  title = title.replace(/\[话题\]/g, '')
+  desc = desc.replace(/\[话题\]/g, '')
+
+  if (title && desc && title.trim() === desc.trim()) {
+    desc = ''
+  }
+
+  if (title.trim().startsWith('#')) title = ''
+  if (desc.trim().startsWith('#')) desc = ''
+
+  return { type, title, desc, author, uid, avatar, cover, video, videos, images, live_photo, music, like, comment, collect, share, play, duration, publishTime, author_followers, author_signature, admire }
 }
 
 const formatVarRegex = /\$\{([^}]+)\}/g
@@ -691,6 +706,7 @@ function generateFormattedText(p: ParsedData, format: string): string {
   const vars: Record<string, string> = {
     '标题': p.title,
     '作者': p.author,
+    'author-name': p.author,
     '简介': p.desc,
     '视频时长': p.duration > 0 ? formatDuration(p.duration) : '',
     '点赞数': String(p.like),
@@ -701,15 +717,18 @@ function generateFormattedText(p: ParsedData, format: string): string {
     '发布时间': p.publishTime ? formatPublishTime(p.publishTime) : '',
     '图片数量': String(imageCount),
     '作者ID': p.uid,
-    '视频链接': p.video,
+    'author-id': p.uid,
     '音乐标题': p.music.title || '',
+    'music-title': p.music.title || '',
     '音乐作者': p.music.author || '',
-    '音乐封面': p.music.cover || '',
+    'music-author': p.music.author || '',
   }
+
   const varReplacements = Object.entries(vars).map(([key, val]) => ({
     regex: new RegExp(`\\$\\{${key}\\}`, 'g'),
     value: val,
   }))
+
   const lines = format.split('\n')
   const resultLines: string[] = []
   for (const line of lines) {
@@ -801,8 +820,14 @@ export function apply(ctx: Context, config: any) {
   const maxMediaSize = config.maxMediaSize ?? 0
   const downloadEngine = config.downloadEngine || 'internal'
 
-  if (downloadEngine === 'aria2' && !ctx.aria2) {
+  const aria2Service = ctx.get('aria2')
+  const downloadsService = ctx.get('downloads')
+
+  if (downloadEngine === 'aria2' && !aria2Service) {
     logger.warn('选择了 aria2 下载引擎，但未检测到 koishi-plugin-aria2-plus 服务，将回退到内置下载')
+  }
+  if (downloadEngine === 'downloads' && !downloadsService) {
+    logger.warn('选择了 downloads 下载引擎，但未检测到 koishi-plugin-downloads 服务，将回退到内置下载')
   }
 
   function getPlatformConfig(type: string): { apiUrl: string | null; dedicatedFirst: boolean; apiKey: string; authHeaderType: string; customHeaderName: string; fieldMapping?: Record<string, string>; customProxy?: any } {
@@ -871,7 +896,14 @@ export function apply(ctx: Context, config: any) {
 
   const extRegexCache: Record<string, RegExp> = {}
 
-  async function downloadFile(url: string, timeout: number, maxSize: number, filePrefix: string, fileExts: string[]): Promise<string> {
+  async function downloadFile(
+    url: string,
+    timeout: number,
+    maxSize: number,
+    filePrefix: string,
+    fileExts: string[],
+    onProgress?: (percent: number, speed: string) => void
+  ): Promise<string> {
     if (!url) throw new Error('链接为空')
     await fs.mkdir(cacheDir, { recursive: true })
     const ext = fileExts.find(e => {
@@ -881,24 +913,25 @@ export function apply(ctx: Context, config: any) {
     const fileName = `${filePrefix}_${Date.now()}_${randomBytes(4).toString('hex')}.${ext}`
     const filePath = path.resolve(cacheDir, fileName)
 
-    if (downloadEngine === 'downloads' && ctx.downloads) {
-      try {
-        const dest = await ctx.downloads.download(url, path.join(cacheDir, fileName), {
-          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-          timeout
-        })
-        const stat = await fs.stat(dest)
-        if (maxSize > 0 && stat.size > maxSize * 1024 * 1024) {
-          await fs.unlink(dest).catch(() => {})
-          throw new Error(`文件过大(${Math.round(stat.size/1024/1024)}MB)，超过限制(${maxSize}MB)`)
-        }
-        return dest
-      } catch (e) {
-        debugLog('ERROR', `downloads 服务下载失败，回退内置下载: ${getErrorMessage(e)}`)
+    if (downloadEngine === 'downloads' && downloadsService) {
+      logger.info(`开始下载: ${url}`)
+      const dest = await downloadsService.download(url, path.join(cacheDir, fileName), {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        timeout
+      })
+      const stat = await fs.stat(dest)
+      const sizeMB = (stat.size / (1024 * 1024)).toFixed(2)
+      logger.info(`下载完成: ${dest} (${sizeMB} MB)`)
+      if (maxSize > 0 && stat.size > maxSize * 1024 * 1024) {
+        await fs.unlink(dest).catch(() => {})
+        throw new Error(`文件过大(${Math.round(stat.size/1024/1024)}MB)，超过限制(${maxSize}MB)`)
       }
-    } else if (downloadEngine === 'aria2' && ctx.aria2) {
+      return dest
+    }
+
+    if (downloadEngine === 'aria2' && aria2Service) {
       try {
-        const gid = await ctx.aria2.addUri([url], {
+        const gid = await aria2Service.addUri([url], {
           dir: cacheDir,
           out: fileName,
           split: 4,
@@ -911,18 +944,28 @@ export function apply(ctx: Context, config: any) {
           header: [`User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36`, `Referer: https://www.baidu.com/`]
         })
         let completed = false
-        const ariaStartTime = Date.now()
+        const startTime = Date.now()
+        let lastProgressTime = 0
         while (!completed) {
-          if (Date.now() - ariaStartTime > timeout) {
-            await ctx.aria2.remove(gid).catch(() => {})
+          if (Date.now() - startTime > timeout) {
+            await aria2Service.remove(gid).catch(() => {})
             throw new Error('aria2下载超时')
           }
-          const status = await ctx.aria2.tellStatus(gid)
+          const status = await aria2Service.tellStatus(gid)
           if (status.status === 'complete') {
             completed = true
+            if (onProgress) onProgress(100, '')
           } else if (status.status === 'error' || status.status === 'removed') {
             throw new Error('aria2下载失败')
           } else {
+            if (onProgress && Date.now() - lastProgressTime > 500) {
+              lastProgressTime = Date.now()
+              const total = parseInt(status.totalLength) || 0
+              const completed = parseInt(status.completedLength) || 0
+              const percent = total > 0 ? Math.round((completed / total) * 100) : 0
+              const speed = formatSpeed(parseInt(status.downloadSpeed) || 0)
+              onProgress(percent, speed)
+            }
             await delay(1000)
           }
         }
@@ -961,8 +1004,19 @@ export function apply(ctx: Context, config: any) {
       await fs.unlink(filePath).catch(() => {})
       throw new Error(`文件过大(${Math.round(contentLength/1024/1024)}MB)，超过限制(${maxSize}MB)`)
     }
+    let downloaded = 0
+    let lastProgressTime = 0
+    response.data.on('data', (chunk: Buffer) => {
+      downloaded += chunk.length
+      if (onProgress && contentLength > 0 && Date.now() - lastProgressTime > 500) {
+        lastProgressTime = Date.now()
+        const percent = Math.round((downloaded / contentLength) * 100)
+        onProgress(percent, '')
+      }
+    })
     try {
       await pipeline(response.data, writer)
+      if (onProgress) onProgress(100, '')
       return filePath
     } catch (e) {
       await fs.unlink(filePath).catch(() => {})
@@ -970,7 +1024,25 @@ export function apply(ctx: Context, config: any) {
     }
   }
 
-  async function sendMedia(session: any, url: string, type: 'image' | 'video' | 'audio', forceDownload: boolean, showFile: boolean) {
+  function formatSpeed(bytesPerSec: number): string {
+    if (bytesPerSec <= 0) return ''
+    const units = ['B/s', 'KB/s', 'MB/s', 'GB/s']
+    let i = 0
+    let speed = bytesPerSec
+    while (speed >= 1024 && i < units.length - 1) {
+      speed /= 1024
+      i++
+    }
+    return `${speed.toFixed(1)}${units[i]}`
+  }
+
+  async function sendMedia(
+    session: any,
+    url: string,
+    type: 'image' | 'video' | 'audio',
+    forceDownload: boolean,
+    showFile: boolean
+  ) {
     if (!url) return
     await downloadLimiter.acquire()
     try {
@@ -983,9 +1055,14 @@ export function apply(ctx: Context, config: any) {
       const prefixMap = { image: 'img', video: 'video', audio: 'music' }
       const sendFunc = type === 'audio' ? h.audio : type === 'video' ? h.video : h.image
 
+      const onProgress = forceDownload ? (percent: number, speed: string) => {
+        const text = `下载进度: ${percent}%` + (speed ? ` (${speed})` : '')
+        logger.info(text)
+      } : undefined
+
       if (forceDownload) {
         try {
-          const localPath = await downloadFile(url, mediaDownloadTimeout, maxMediaSize, prefixMap[type], extMap[type])
+          const localPath = await downloadFile(url, mediaDownloadTimeout, maxMediaSize, prefixMap[type], extMap[type], onProgress)
           try {
             await sendWithTimeout(session, sendFunc(`file://${localPath}`))
           } finally {
@@ -1080,7 +1157,11 @@ export function apply(ctx: Context, config: any) {
         const p = item.parsed
         const text = item.text
         if (text && config.showImageText) forwardMessages.push(buildForwardNode(session, text, botName))
-        if (p.cover && config.showCoverImage && p.type !== 'live_photo' && !(p.type === 'live' && (p.live_photo?.length || p.images?.length))) {
+        if (config.showAuthorAvatar && p.avatar) {
+          if (config.showAuthorAvatarText) forwardMessages.push(buildForwardNode(session, config.authorAvatarText || '作者头像：', botName))
+          forwardMessages.push(buildForwardNode(session, h.image(p.avatar), botName))
+        }
+        if (p.cover && config.showCoverImage && p.type !== 'live_photo' && p.type !== 'image' && !(p.type === 'live' && (p.live_photo?.length || p.images?.length))) {
           forwardMessages.push(buildForwardNode(session, h.image(p.cover), botName))
         }
         if (config.showMusicCover && p.music.cover) {
@@ -1111,12 +1192,17 @@ export function apply(ctx: Context, config: any) {
         const p = item.parsed
         const text = item.text
         if (text && config.showImageText) { await sendWithTimeout(session, text); await delay(300) }
-        if (p.cover && config.showCoverImage && p.type !== 'live_photo' && !(p.type === 'live' && (p.live_photo?.length || p.images?.length))) {
-          await sendMedia(session, p.cover, 'image', config.forceDownloadImage, config.showImageFile).catch(() => {})
+        if (config.showAuthorAvatar && p.avatar) {
+          if (config.showAuthorAvatarText) await sendWithTimeout(session, config.authorAvatarText || '作者头像：')
+          await sendMedia(session, p.avatar, 'image', config.forceDownloadAuthorAvatar, config.showAuthorAvatarFile).catch(() => {})
+          await delay(300)
+        }
+        if (p.cover && config.showCoverImage && p.type !== 'live_photo' && p.type !== 'image' && !(p.type === 'live' && (p.live_photo?.length || p.images?.length))) {
+          await sendMedia(session, p.cover, 'image', config.forceDownloadCover, config.showCoverFile).catch(() => {})
           await delay(300)
         }
         if (config.showMusicCover && p.music.cover) {
-          await sendMedia(session, p.music.cover, 'image', config.forceDownloadImage, config.showImageFile).catch(() => {})
+          await sendMedia(session, p.music.cover, 'image', false, true).catch(() => {})
           await delay(300)
         }
         if (p.video && (p.type === 'video' || (p.type === 'live' && !p.live_photo?.length && !p.images?.length))) {
@@ -1126,7 +1212,7 @@ export function apply(ctx: Context, config: any) {
         if (p.type === 'image' || p.type === 'live_photo' || (p.type === 'live' && (p.live_photo?.length || p.images?.length))) {
           const imageUrls = p.images?.length ? p.images : (p.live_photo?.map(lp => lp.image) ?? [])
           for (const imgUrl of imageUrls) {
-            await sendMedia(session, imgUrl, 'image', config.forceDownloadImage, config.showImageFile).catch(() => {})
+            await sendMedia(session, imgUrl, 'image', config.forceDownloadImageNew, config.showImageFileNew).catch(() => {})
             await delay(200)
           }
         }
@@ -1348,5 +1434,3 @@ export function apply(ctx: Context, config: any) {
 
   debugLog('INFO', '插件初始化完成')
 }
-
-apply.inject = ['aria2', 'downloads']
