@@ -1,10 +1,5 @@
 import { Context, Schema, h, Logger } from 'koishi'
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios'
-import fs from 'fs/promises'
-import path from 'path'
-import { createWriteStream } from 'fs'
-import { pipeline } from 'stream/promises'
-import { randomBytes } from 'crypto'
 
 class SimpleLRUCache<V> {
   private map = new Map<string, { value: V; expireAt: number }>()
@@ -112,29 +107,16 @@ export const Config = Schema.intersect([
     showMusicCover: Schema.boolean().default(true).description('发送音乐封面图片'),
     showVideoFile: Schema.boolean().default(true).description('视频是否以视频形式发送（关闭则只发送链接）'),
     sendLiveMessage: Schema.boolean().default(true).description('直播作品发送文字消息（不发送视频）'),
-    forceDownloadCover: Schema.boolean().default(false).description('强制下载封面'),
-    forceDownloadImageNew: Schema.boolean().default(false).description('强制下载图片'),
-    forceDownloadAuthorAvatar: Schema.boolean().default(false).description('强制下载作者头像'),
-    forceDownloadVideo: Schema.boolean().default(false).description('强制下载视频'),
   }).description('媒体发送'),
 
   Schema.object({
     showMusicVoice: Schema.boolean().default(false).description('音乐链接以语音形式发送'),
     showMusicVoiceFile: Schema.boolean().default(true).description('音乐链接是否以语音形式发送（关闭则只发送链接）'),
-    forceDownloadMusicVoice: Schema.boolean().default(false).description('强制下载音乐语音'),
   }).description('音乐语音（需 silk 和 ffmpeg）'),
 
   Schema.object({
     maxDescLength: Schema.number().min(0).step(1).default(200).description('简介长度上限'),
     maxConcurrent: Schema.number().min(1).step(1).default(3).description('解析最大并发数'),
-    downloadConcurrency: Schema.number().min(1).step(1).default(3).description('下载线程数'),
-    mediaDownloadTimeout: Schema.number().min(0).step(1).default(120000).description('统一下载超时 (ms)'),
-    maxMediaSize: Schema.number().min(0).step(1).default(0).description('最大下载文件大小 (MB)，0 为不限制'),
-    downloadEngine: Schema.union([
-      Schema.const('internal').description('内置下载'),
-      Schema.const('aria2').description('aria2 下载（需 koishi-plugin-aria2-plus）'),
-      Schema.const('downloads').description('downloads 服务下载'),
-    ]).default('internal').description('下载引擎'),
   }).description('性能与限制'),
 
   Schema.object({
@@ -171,8 +153,8 @@ export const Config = Schema.intersect([
 
   Schema.object({
     deduplicationInterval: Schema.number().min(0).step(1).default(180).description('去重间隔 (s)'),
+    enableDeduplication: Schema.boolean().default(true).description('启用重复解析检测与提示'),
     cacheTTL: Schema.number().min(0).step(1).default(600).description('缓存时间 (s)'),
-    cacheDir: Schema.string().default('./temp_cache').description('统一临时目录'),
   }).description('缓存与临时文件'),
 
   Schema.object({
@@ -301,6 +283,7 @@ export const Config = Schema.intersect([
     invalidLinkText: Schema.string().default('无效的视频链接').description('无效链接提示'),
     parseErrorPrefix: Schema.string().default('❌ 解析失败：').description('错误前缀'),
     parseErrorItemFormat: Schema.string().default('【${url}】: ${msg}').description('错误格式'),
+    deduplicationTipText: Schema.string().default('链接 ${url} 在最近 ${interval} 秒内已解析过，已跳过。').description('重复解析提示，支持变量 ${url} ${interval}'),
   }).description('界面文本'),
 ])
 
@@ -461,6 +444,21 @@ function linkTypeParser(content: string, customRules: { pattern: RegExp; type: s
   return matches
 }
 
+function cleanUrl(url: string): string {
+  url = url.replace(/&amp;/g, '&')
+            .replace(/&quot;/g, '"')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/\\\//g, '/')
+  url = url.replace(/^[\s"'<]+/, '')
+  url = url.replace(/[\s"'<>\{\}\[\]`,;]+$/, '')
+  if (!/^https?:\/\//i.test(url)) {
+    if (/^\/\//.test(url)) url = 'https:' + url
+    else return url
+  }
+  return url
+}
+
 function extractAllUrlsFromMessage(session: any, customRules: { pattern: RegExp; type: string }[]): LinkMatch[] {
   const content = session.content?.trim() || ''
   const matchedLinks = linkTypeParser(content, customRules)
@@ -486,36 +484,17 @@ function extractAllUrlsFromMessage(session: any, customRules: { pattern: RegExp;
   for (const cardContent of cardsContent) {
     matchedLinks.push(...linkTypeParser(cardContent, customRules))
   }
-  const seen = new Set<string>()
-  const result: LinkMatch[] = []
+  const cleanResult: LinkMatch[] = []
+  const seenUrls = new Set<string>()
   for (const link of matchedLinks) {
-    if (!seen.has(link.url)) {
-      seen.add(link.url)
-      result.push(link)
+    const cleaned = cleanUrl(link.url)
+    if (!cleaned || !/^https?:\/\//i.test(cleaned)) continue
+    if (!seenUrls.has(cleaned)) {
+      seenUrls.add(cleaned)
+      cleanResult.push({ ...link, url: cleaned })
     }
   }
-  return result
-}
-
-function cleanUrl(url: string): string {
-  try {
-    url = url.replace(/&amp;/g, '&')
-    const urlObj = new URL(url)
-    if (urlObj.protocol !== 'http:' && urlObj.protocol !== 'https:') {
-      throw new Error('非法的协议')
-    }
-    if (urlObj.hostname.includes('douyin.com') || urlObj.hostname.includes('v.douyin.com')) {
-      ['source', 'share_type', 'share_token', 'timestamp', 'from', 'isappinstalled'].forEach(p => urlObj.searchParams.delete(p))
-      return urlObj.origin + urlObj.pathname
-    }
-    if (urlObj.hostname.includes('bilibili.com') || urlObj.hostname.includes('b23.tv')) {
-      ['share_source', 'share_medium', 'share_plat', 'share_session_id', 'share_tag', 'timestamp'].forEach(p => urlObj.searchParams.delete(p))
-      return urlObj.origin + urlObj.pathname
-    }
-    return urlObj.toString()
-  } catch {
-    return url.replace(/&amp;/g, '&').replace(/\?.*/, '')
-  }
+  return cleanResult
 }
 
 function formatDuration(seconds: number): string {
@@ -653,6 +632,10 @@ function parseApiResponse(raw: any, maxDescLen: number, fieldMapping?: Record<st
     image: lp.image.startsWith('http') ? lp.image : 'https:' + lp.image,
     video: lp.video ? (lp.video.startsWith('http') ? lp.video : 'https:' + lp.video) : ''
   })) : []
+
+  if (type === 'live' && live_photo.length > 0 && !data.live) {
+    type = 'live_photo'
+  }
 
   const musicCoverRaw = mapField('music_cover', () => data.music?.cover || data.music?.albumCover?.url || '')
   const musicUrlRaw = mapField('music_url', () => data.music?.url || data.music?.playURL || '')
@@ -796,16 +779,19 @@ export function apply(ctx: Context, config: any) {
     return [p.type, p.title, p.author, p.uid, p.video, imgSig].map(v => String(v ?? '')).join('::')
   }
 
-  const texts = {
-    waitingTipText: config.waitingTipText || '正在解析视频，请稍候...',
-    unsupportedPlatformText: config.unsupportedPlatformText || '不支持该平台链接',
-    invalidLinkText: config.invalidLinkText || '无效的视频链接',
-    parseErrorPrefix: config.parseErrorPrefix || '❌ 解析失败：',
-    parseErrorItemFormat: config.parseErrorItemFormat || '【${url}】: ${msg}',
+  function getText(key: string): string {
+    const defaults: Record<string, string> = {
+      waitingTipText: '正在解析视频，请稍候...',
+      unsupportedPlatformText: '不支持该平台链接',
+      invalidLinkText: '无效的视频链接',
+      parseErrorPrefix: '❌ 解析失败：',
+      parseErrorItemFormat: '【${url}】: ${msg}',
+      deduplicationTipText: '链接 ${url} 在最近 ${interval} 秒内已解析过，已跳过。',
+    }
+    return config[key] || defaults[key] || ''
   }
 
   const proxyConfig = config.proxy || {}
-  const cacheDir = config.cacheDir || './temp_cache'
   const customPlatforms: CustomPlatformConfig[] = (config.customPlatforms || []).map((p: any) => ({
     name: p.name,
     apiUrl: p.apiUrl,
@@ -815,21 +801,6 @@ export function apply(ctx: Context, config: any) {
     fieldMapping: parseFieldMapping(p.fieldMapping),
     proxy: p.proxy || null
   }))
-
-  const downloadLimiter = new ConcurrencyLimiter(config.downloadConcurrency || 3)
-  const mediaDownloadTimeout = config.mediaDownloadTimeout ?? 120000
-  const maxMediaSize = config.maxMediaSize ?? 0
-  const downloadEngine = config.downloadEngine || 'internal'
-
-  const aria2Service = ctx.get('aria2')
-  const downloadsService = ctx.get('downloads')
-
-  if (downloadEngine === 'aria2' && !aria2Service) {
-    logger.warn('选择了 aria2 下载引擎，但未检测到 koishi-plugin-aria2-plus 服务，将回退到内置下载')
-  }
-  if (downloadEngine === 'downloads' && !downloadsService) {
-    logger.warn('选择了 downloads 下载引擎，但未检测到 koishi-plugin-downloads 服务，将回退到内置下载')
-  }
 
   function getPlatformConfig(type: string): { apiUrl: string | null; dedicatedFirst: boolean; apiKey: string; authHeaderType: string; customHeaderName: string; fieldMapping?: Record<string, string>; customProxy?: any } {
     if (type.startsWith('custom_')) {
@@ -895,244 +866,21 @@ export function apply(ctx: Context, config: any) {
     return {}
   }
 
-  const extRegexCache: Record<string, RegExp> = {}
-
-  async function downloadFile(
-    url: string,
-    timeout: number,
-    maxSize: number,
-    filePrefix: string,
-    fileExts: string[],
-    onProgress?: (percent: number, speed: string) => void
-  ): Promise<string> {
-    if (!url) throw new Error('链接为空')
-    await fs.mkdir(cacheDir, { recursive: true })
-    const ext = fileExts.find(e => {
-      const r = extRegexCache[e] || (extRegexCache[e] = new RegExp('\\.' + e + '(\\?|$)', 'i'))
-      return r.test(url)
-    }) || fileExts[0]
-    const fileName = `${filePrefix}_${Date.now()}_${randomBytes(4).toString('hex')}.${ext}`
-    const filePath = path.resolve(cacheDir, fileName)
-    const startTime = Date.now()
-
-    if (downloadEngine === 'downloads' && downloadsService) {
-      logger.info(`[下载] 开始 (downloads): ${url}`)
-      try {
-        const dest = await downloadsService.download(url, path.join(cacheDir, fileName), {
-          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-          timeout
-        })
-        const stat = await fs.stat(dest)
-        const sizeMB = (stat.size / (1024 * 1024)).toFixed(2)
-        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
-        logger.info(`[下载] 完成 (downloads): ${dest} (${sizeMB} MB, 耗时 ${elapsed}s)`)
-        if (maxSize > 0 && stat.size > maxSize * 1024 * 1024) {
-          await fs.unlink(dest).catch(() => {})
-          throw new Error(`文件过大(${Math.round(stat.size/1024/1024)}MB)，超过限制(${maxSize}MB)`)
-        }
-        return dest
-      } catch (e) {
-        debugLog('ERROR', 'downloads 下载失败，回退内置下载:', e)
-        throw e
-      }
-    }
-
-    if (downloadEngine === 'aria2' && aria2Service) {
-      try {
-        logger.info(`[下载] 开始 (aria2): ${url}`)
-        const gid = await aria2Service.addUri([url], {
-          dir: cacheDir,
-          out: fileName,
-          split: 4,
-          continue: true,
-          maxConnectionPerServer: 5,
-          timeout: timeout / 1000,
-          maxFileNotFound: 5,
-          maxTries: 5,
-          retryWait: 2,
-          header: [`User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36`, `Referer: https://www.baidu.com/`]
-        })
-        let completed = false
-        const ariaStart = Date.now()
-        let lastProgressTime = 0
-        while (!completed) {
-          if (Date.now() - ariaStart > timeout) {
-            await aria2Service.remove(gid).catch(() => {})
-            throw new Error('aria2下载超时')
-          }
-          const status = await aria2Service.tellStatus(gid)
-          if (status.status === 'complete') {
-            completed = true
-            if (onProgress) onProgress(100, '')
-          } else if (status.status === 'error' || status.status === 'removed') {
-            throw new Error('aria2下载失败')
-          } else {
-            if (onProgress && Date.now() - lastProgressTime > 500) {
-              lastProgressTime = Date.now()
-              const total = parseInt(status.totalLength) || 0
-              const completed = parseInt(status.completedLength) || 0
-              const percent = total > 0 ? Math.round((completed / total) * 100) : -1
-              const speed = formatSpeed(parseInt(status.downloadSpeed) || 0)
-              onProgress(percent, speed)
-            }
-            await delay(1000)
-          }
-        }
-        const stat = await fs.stat(filePath)
-        const sizeMB = (stat.size / (1024 * 1024)).toFixed(2)
-        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
-        logger.info(`[下载] 完成 (aria2): ${filePath} (${sizeMB} MB, 耗时 ${elapsed}s)`)
-        if (maxSize > 0 && stat.size > maxSize * 1024 * 1024) {
-          await fs.unlink(filePath).catch(() => {})
-          throw new Error(`文件过大(${Math.round(stat.size/1024/1024)}MB)，超过限制(${maxSize}MB)`)
-        }
-        return filePath
-      } catch (e) {
-        debugLog('ERROR', `aria2下载失败，回退内置下载: ${getErrorMessage(e)}`)
-      }
-    }
-
-    const urlObj = new URL(url)
-    if (urlObj.protocol !== 'http:' && urlObj.protocol !== 'https:') {
-      throw new Error('不支持的下载协议：' + urlObj.protocol)
-    }
-
-    const writer = createWriteStream(filePath)
-    let response
-    try {
-      response = await http({
-        method: 'GET',
-        url,
-        responseType: 'stream',
-        timeout,
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Referer': 'https://www.baidu.com/' },
-        maxRedirects: 5,
-        validateStatus: (status: number) => status >= 200 && status < 300,
-      })
-    } catch (e) {
-      writer.destroy()
-      await fs.unlink(filePath).catch(() => {})
-      throw new Error(`下载失败: ${getErrorMessage(e)}`)
-    }
-    const maxSizeBytes = maxSize * 1024 * 1024
-    const contentLength = Number(response.headers['content-length'] || 0)
-    if (maxSizeBytes > 0 && contentLength > maxSizeBytes) {
-      writer.destroy()
-      await fs.unlink(filePath).catch(() => {})
-      throw new Error(`文件过大(${Math.round(contentLength/1024/1024)}MB)，超过限制(${maxSize}MB)`)
-    }
-    const sizeStr = contentLength > 0 ? `${(contentLength / (1024 * 1024)).toFixed(2)}MB` : '未知大小'
-    logger.info(`[下载] 开始 (内置): ${url} (${sizeStr})`)
-
-    let downloaded = 0
-    let lastProgressTime = 0
-    response.data.on('data', (chunk: Buffer) => {
-      downloaded += chunk.length
-      if (onProgress && Date.now() - lastProgressTime > 500) {
-        lastProgressTime = Date.now()
-        if (contentLength > 0) {
-          const percent = Math.round((downloaded / contentLength) * 100)
-          const mb = (downloaded / (1024 * 1024)).toFixed(2)
-          const totalMB = (contentLength / (1024 * 1024)).toFixed(2)
-          onProgress(percent, `${mb}/${totalMB}MB`)
-        } else {
-          const mb = (downloaded / (1024 * 1024)).toFixed(2)
-          onProgress(-1, `已下载 ${mb} MB`)
-        }
-      }
-    })
-    try {
-      await pipeline(response.data, writer)
-      const stat = await fs.stat(filePath)
-      const sizeMB = (stat.size / (1024 * 1024)).toFixed(2)
-      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)
-      logger.info(`[下载] 完成 (内置): ${filePath} (${sizeMB} MB, 耗时 ${elapsed}s)`)
-      if (onProgress) {
-        if (contentLength > 0) onProgress(100, `${sizeMB}MB`)
-        else onProgress(-1, `完成，共 ${sizeMB} MB`)
-      }
-      return filePath
-    } catch (e) {
-      await fs.unlink(filePath).catch(() => {})
-      throw new Error(`写入文件失败: ${getErrorMessage(e)}`)
-    }
-  }
-
-  function formatSpeed(bytesPerSec: number): string {
-    if (bytesPerSec <= 0) return ''
-    const units = ['B/s', 'KB/s', 'MB/s', 'GB/s']
-    let i = 0
-    let speed = bytesPerSec
-    while (speed >= 1024 && i < units.length - 1) {
-      speed /= 1024
-      i++
-    }
-    return `${speed.toFixed(1)}${units[i]}`
-  }
-
   async function sendMedia(
     session: any,
     url: string,
     type: 'image' | 'video' | 'audio',
-    forceDownload: boolean,
     showFile: boolean
   ) {
     if (!url) return
-    await downloadLimiter.acquire()
+    if (!showFile) {
+      await sendWithTimeout(session, `${type === 'audio' ? '音乐' : type === 'video' ? '视频' : '图片'}链接：${url}`).catch(() => {})
+      return
+    }
     try {
-      const sendLink = async () => { await sendWithTimeout(session, `${type === 'audio' ? '音乐' : type === 'video' ? '视频' : '图片'}链接：${url}`).catch(() => {}) }
-      const extMap: Record<string, string[]> = {
-        image: ['png', 'jpg', 'jpeg', 'gif', 'webp'],
-        video: ['mp4'],
-        audio: ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a']
-      }
-      const prefixMap = { image: 'img', video: 'video', audio: 'music' }
-      const sendFunc = type === 'audio' ? h.audio : type === 'video' ? h.video : h.image
-
-      const onProgress = (percent: number, info: string) => {
-        if (percent === -1) {
-          logger.info(`[下载] ${info}`)
-        } else {
-          const text = `[下载] ${percent}%` + (info ? ` (${info})` : '')
-          logger.info(text)
-        }
-      }
-
-      if (forceDownload) {
-        try {
-          const localPath = await downloadFile(url, mediaDownloadTimeout, maxMediaSize, prefixMap[type], extMap[type], onProgress)
-          try {
-            await sendWithTimeout(session, sendFunc(`file://${localPath}`))
-          } finally {
-            await fs.unlink(localPath).catch(() => {})
-          }
-          return
-        } catch (e) {
-          debugLog('ERROR', `强制下载${type}失败，尝试URL发送:`, getErrorMessage(e))
-          try {
-            await sendWithTimeout(session, sendFunc(url))
-          } catch { await sendLink() }
-        }
-        return
-      }
-      if (!showFile) {
-        await sendLink()
-        return
-      }
-      try {
-        await sendWithTimeout(session, sendFunc(url))
-      } catch {
-        try {
-          const localPath = await downloadFile(url, mediaDownloadTimeout, maxMediaSize, prefixMap[type], extMap[type], onProgress)
-          try {
-            await sendWithTimeout(session, sendFunc(`file://${localPath}`))
-          } finally {
-            await fs.unlink(localPath).catch(() => {})
-          }
-        } catch { await sendLink() }
-      }
-    } finally {
-      downloadLimiter.release()
+      await sendWithTimeout(session, type === 'audio' ? h.audio(url) : type === 'video' ? h.video(url) : h.image(url))
+    } catch {
+      await sendWithTimeout(session, `${type === 'audio' ? '音乐' : type === 'video' ? '视频' : '图片'}链接：${url}`).catch(() => {})
     }
   }
 
@@ -1149,12 +897,13 @@ export function apply(ctx: Context, config: any) {
           debugLog('INFO', `平台 ${match.type} 已禁用，跳过链接: ${match.url}`)
           return
         }
-        if (config.deduplicationInterval > 0) {
+        if (config.enableDeduplication !== false && config.deduplicationInterval > 0) {
           const lastTime = dedupCache.get(match.url)
           if (lastTime && (Date.now() - lastTime < config.deduplicationInterval * 1000)) {
             debugLog('INFO', `跳过重复链接: ${match.url}`)
-            const shortUrl = match.url.length > 50 ? match.url.slice(0, 50) + '...' : match.url
-            await sendWithTimeout(session, `链接 ${shortUrl} 在最近 ${config.deduplicationInterval} 秒内已解析过，已跳过。`).catch(() => {})
+            const shortUrl = match.url.length > 80 ? match.url.slice(0, 80) + '...' : match.url
+            const tip = getText('deduplicationTipText').replace(/\$\{url\}/g, shortUrl).replace(/\$\{interval\}/g, String(config.deduplicationInterval))
+            await sendWithTimeout(session, tip).catch(() => {})
             return
           }
         }
@@ -1163,7 +912,7 @@ export function apply(ctx: Context, config: any) {
         const fieldMapping = platformConf.fieldMapping
         const result = await processSingleUrl(match.url, match.type, fieldMapping, platformConf)
         if (result.success) {
-          if (config.deduplicationInterval > 0) {
+          if (config.enableDeduplication !== false && config.deduplicationInterval > 0) {
             const fp = contentFingerprint(result.data.parsed)
             const lastDedup = contentDedupCache.get(fp)
             if (lastDedup && (Date.now() - lastDedup < config.deduplicationInterval * 1000)) {
@@ -1175,7 +924,8 @@ export function apply(ctx: Context, config: any) {
           }
           items.push(result.data)
         } else {
-          const item = texts.parseErrorItemFormat.replace(/\$\{url\}/g, match.url.length > 50 ? match.url.slice(0,50)+'...' : match.url).replace(/\$\{msg\}/g, result.msg)
+          const displayUrl = match.url.length > 80 ? match.url.slice(0, 80) + '...' : match.url
+          const item = getText('parseErrorItemFormat').replace(/\$\{url\}/g, displayUrl).replace(/\$\{msg\}/g, result.msg)
           errors.push(item)
         }
       } finally {
@@ -1184,7 +934,7 @@ export function apply(ctx: Context, config: any) {
     })
     await Promise.all(promises)
 
-    if (errors.length) await sendWithTimeout(session, `${texts.parseErrorPrefix}\n${errors.join('\n')}`)
+    if (errors.length) await sendWithTimeout(session, `${getText('parseErrorPrefix')}\n${errors.join('\n')}`)
     if (!items.length) return
 
     const enableForward = config.enableForward && (session.platform === 'onebot' || session.platform === 'satori')
@@ -1212,25 +962,32 @@ export function apply(ctx: Context, config: any) {
         if (config.showMusicCover && p.music.cover) {
           forwardMessages.push(buildForwardNode(session, h.image(p.music.cover), botName))
         }
-        if (p.type === 'image' || p.type === 'live_photo' || (p.type === 'live' && (p.live_photo?.length || p.images?.length))) {
+        if (p.type === 'live_photo' && p.live_photo?.length) {
+          for (const lp of p.live_photo) {
+            forwardMessages.push(buildForwardNode(session, h.image(lp.image), botName))
+          }
+        } else if (p.type === 'image' || (p.type === 'live' && (p.live_photo?.length || p.images?.length))) {
           const imageUrls = p.images?.length ? p.images : (p.live_photo?.map(lp => lp.image) ?? [])
           for (const imgUrl of imageUrls) {
             forwardMessages.push(buildForwardNode(session, h.image(imgUrl), botName))
           }
         }
-        if (p.video && p.type !== 'live') {
+        if (p.video && p.type !== 'live' && p.type !== 'live_photo') {
           forwardMessages.push(buildForwardNode(session, h.video(p.video), botName))
         }
         if (config.showMusicVoice && p.music.url) {
           forwardMessages.push(buildForwardNode(session, h.audio(p.music.url), botName))
         }
       }
-      if (forwardMessages.length) {
+
+      const MAX_NODES = 50
+      for (let i = 0; i < forwardMessages.length; i += MAX_NODES) {
+        const batch = forwardMessages.slice(i, i + MAX_NODES)
         try {
-          await sendWithTimeout(session, h('message', { forward: true }, forwardMessages.slice(0, 100)), config.retryTimes)
+          await sendWithTimeout(session, h('message', { forward: true }, batch), config.retryTimes)
         } catch (err) {
           debugLog('ERROR', '合并转发失败，降级逐条发送:', err)
-          for (const node of forwardMessages) {
+          for (const node of batch) {
             await sendWithTimeout(session, node.data.content).catch(() => {})
             await delay(300)
           }
@@ -1245,27 +1002,28 @@ export function apply(ctx: Context, config: any) {
         }
         if (text && config.showImageText) { await sendWithTimeout(session, text); await delay(300) }
         if (config.showAuthorAvatar && p.avatar) {
-          await sendMedia(session, p.avatar, 'image', config.forceDownloadAuthorAvatar, config.showAuthorAvatarFile).catch(() => {})
+          await sendMedia(session, p.avatar, 'image', config.showAuthorAvatarFile).catch(() => {})
           await delay(300)
         }
         if (p.cover && config.showCoverImage && p.type !== 'live_photo' && p.type !== 'image' && p.type !== 'live') {
           if (config.showCoverText) await sendWithTimeout(session, config.coverText || '封面：')
-          await sendMedia(session, p.cover, 'image', config.forceDownloadCover, config.showCoverFile).catch(() => {})
+          await sendMedia(session, p.cover, 'image', config.showCoverFile).catch(() => {})
           await delay(300)
         }
         if (config.showMusicCover && p.music.cover) {
-          await sendMedia(session, p.music.cover, 'image', false, true).catch(() => {})
+          await sendMedia(session, p.music.cover, 'image', true).catch(() => {})
           await delay(300)
         }
-        if (p.video && p.type !== 'live') {
-          await sendMedia(session, p.video, 'video', config.forceDownloadVideo, config.showVideoFile).catch(() => {})
-          await delay(500)
-        }
-        if (p.type === 'image' || p.type === 'live_photo' || (p.type === 'live' && (p.live_photo?.length || p.images?.length))) {
+        if (p.type === 'live_photo' && p.live_photo?.length) {
+          for (const lp of p.live_photo) {
+            await sendMedia(session, lp.image, 'image', config.showImageFileNew).catch(() => {})
+            await delay(500)
+          }
+        } else if (p.type === 'image' || (p.type === 'live' && (p.live_photo?.length || p.images?.length))) {
           const imageUrls = p.images?.length ? p.images : (p.live_photo?.map(lp => lp.image) ?? [])
           for (let i = 0; i < imageUrls.length; i++) {
             logger.info(`[发送] 图片 ${i+1}/${imageUrls.length}`)
-            await sendMedia(session, imageUrls[i], 'image', config.forceDownloadImageNew, config.showImageFileNew).catch(() => {})
+            await sendMedia(session, imageUrls[i], 'image', config.showImageFileNew).catch(() => {})
             await delay(1000)
           }
         }
@@ -1273,7 +1031,7 @@ export function apply(ctx: Context, config: any) {
           await sendWithTimeout(session, '直播进行中，无法发送视频流。').catch(() => {})
         }
         if (config.showMusicVoice && p.music.url) {
-          await sendMedia(session, p.music.url, 'audio', config.forceDownloadMusicVoice, config.showMusicVoiceFile).catch(() => {})
+          await sendMedia(session, p.music.url, 'audio', config.showMusicVoiceFile).catch(() => {})
           await delay(300)
         }
       }
@@ -1372,7 +1130,7 @@ export function apply(ctx: Context, config: any) {
       debugLog('ERROR', `解析失败: ${cleanedUrl}`, getErrorMessage(error))
       return { success: false, msg: getErrorMessage(error) }
     }
-    return { success: false, msg: texts.unsupportedPlatformText }
+    return { success: false, msg: getText('unsupportedPlatformText') }
   }
 
   async function processSingleUrl(url: string, type: string, fieldMapping?: Record<string, string>, platformConf?: any): Promise<{ success: true; data: { text: string; parsed: ParsedData } } | { success: false; msg: string; url: string }> {
@@ -1436,59 +1194,23 @@ export function apply(ctx: Context, config: any) {
     const matches = extractAllUrlsFromMessage(session, customRules)
     if (!matches.length) return
     debugLog('INFO', `检测到 ${matches.length} 个链接`)
-    if (config.showWaitingTip) { try { await sendWithTimeout(session, texts.waitingTipText) } catch(e) { debugLog('WARN', '等待提示发送失败:', e) } }
+    if (config.showWaitingTip) { try { await sendWithTimeout(session, getText('waitingTipText')) } catch(e) { debugLog('WARN', '等待提示发送失败:', e) } }
     await flush(session, matches)
   })
 
   ctx.command('parse <url>', '手动解析视频').action(async ({ session }, url) => {
-    if (!url) { await sendWithTimeout(session, texts.invalidLinkText); return }
+    if (!url) { await sendWithTimeout(session, getText('invalidLinkText')); return }
     const matches = linkTypeParser(url, customRules)
-    if (!matches.length) { await sendWithTimeout(session, texts.invalidLinkText); return }
-    if (config.showWaitingTip) { try { await sendWithTimeout(session, texts.waitingTipText) } catch {} }
+    if (!matches.length) { await sendWithTimeout(session, getText('invalidLinkText')); return }
+    if (config.showWaitingTip) { try { await sendWithTimeout(session, getText('waitingTipText')) } catch {} }
     await flush(session, matches)
   })
 
-  const tempCleanupInterval = setInterval(async () => {
-    try {
-      const files = await fs.readdir(cacheDir)
-      const now = Date.now()
-      for (const file of files) {
-        if ((file.startsWith('video_') && file.endsWith('.mp4')) ||
-            (file.startsWith('img_') && file.match(/\.(png|jpg|jpeg|gif|webp)$/i)) ||
-            (file.startsWith('music_') && file.match(/\.(mp3|wav|ogg|flac|aac|m4a)$/i))) {
-          const filePath = path.join(cacheDir, file)
-          const stats = await fs.stat(filePath)
-          if (now - stats.mtimeMs > 3600000) { await fs.unlink(filePath).catch(() => {}) }
-        }
-      }
-    } catch (e) {
-      if ((e as any)?.code !== 'ENOENT') debugLog('WARN', '清理临时文件失败:', e)
-    }
-  }, 3600000)
-
   ctx.on('dispose', () => {
-    clearInterval(tempCleanupInterval)
     urlCacheLocal.clear()
     dedupCache.clear()
     debugLog('INFO', '插件已卸载')
   })
-
-  if (!process.listenerCount('beforeExit')) {
-    process.once('beforeExit', async () => {
-      try {
-        const files = await fs.readdir(cacheDir)
-        for (const file of files) {
-          if ((file.startsWith('video_') && file.endsWith('.mp4')) ||
-              (file.startsWith('img_') && file.match(/\.(png|jpg|jpeg|gif|webp)$/i)) ||
-              (file.startsWith('music_') && file.match(/\.(mp3|wav|ogg|flac|aac|m4a)$/i))) {
-            await fs.unlink(path.join(cacheDir, file)).catch(() => {})
-          }
-        }
-      } catch (e) {
-        if ((e as any)?.code !== 'ENOENT') debugLog('WARN', '退出清理临时文件失败:', e)
-      }
-    })
-  }
 
   debugLog('INFO', '插件初始化完成')
 }

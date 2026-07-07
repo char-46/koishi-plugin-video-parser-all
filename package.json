@@ -1,12 +1,10 @@
 {
   "name": "koishi-plugin-video-parser-all",
-  "description": "Koishi 全平台视频/图集解析插件，支持抖音/快手/B站/微博/小红书/剪映/YouTube/TikTok等20+平台",
-  "version": "1.5.5",
+  "description": "Koishi 全平台视频/图集解析插件，支持抖音/快手/B站/微博/小红书/YouTube/TikTok等20+平台",
+  "version": "1.5.7",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
-  "files": [
-    "lib"
-  ],
+  "files": ["lib"],
   "license": "MIT",
   "scripts": {
     "build": "tsc",
@@ -87,35 +85,14 @@
     "最右"
   ],
   "devDependencies": {
-    "@koishijs/client": "^5.30.4",
-    "@koishijs/scripts": "^4.6.2",
-    "rimraf": "^5.0.5",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "rimraf": "^5.0.5"
   },
   "dependencies": {
     "axios": "^1.16.1"
   },
   "peerDependencies": {
-    "@koishijs/plugin-console": "^5.30.4",
-    "koishi": "^4.18.7",
-    "koishi-plugin-downloads": "^1.0.0",
-    "koishi-plugin-silk": "^1.0.0",
-    "koishi-plugin-ffmpeg": "^1.0.0",
-    "koishi-plugin-aria2-plus": "^1.0.0"
-  },
-  "peerDependenciesMeta": {
-    "koishi-plugin-downloads": {
-      "optional": true
-    },
-    "koishi-plugin-silk": {
-      "optional": true
-    },
-    "koishi-plugin-ffmpeg": {
-      "optional": true
-    },
-    "koishi-plugin-aria2-plus": {
-      "optional": true
-    }
+    "koishi": "^4.18.7"
   },
   "repository": {
     "type": "git",

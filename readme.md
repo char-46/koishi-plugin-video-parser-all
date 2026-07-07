@@ -32,7 +32,7 @@ This is a **multi-platform video/image parsing plugin** developed for the Koishi
 ### 消息格式 (Message Format)
 | 配置项 (Config) | 类型 (Type) | 默认值 (Default) | 说明 (Description) |
 |----------------|-------------|-------------------|---------------------|
-| `unifiedMessageFormat` | string | 见预设 (See preset) | 文字格式，支持变量，空行自动隐藏 (Text format, supports variables, auto-hide empty lines) |
+| `unifiedMessageFormat` | string | 见预设 (See preset) | 文字格式，支持变量：${标题} ${作者} ${简介} ${视频时长} ${点赞数} ${收藏数} ${转发数} ${播放数} ${评论数} ${发布时间} ${图片数量} ${作者ID} ${音乐标题} ${音乐作者}，空行自动隐藏 (Text format, supports variables: ${标题} ${作者} ${简介} ${视频时长} ${点赞数} ${收藏数} ${转发数} ${播放数} ${评论数} ${发布时间} ${图片数量} ${作者ID} ${音乐标题} ${音乐作者}, auto-hide empty lines) |
 
 ### 媒体发送 (Media Sending)
 | 配置项 (Config) | 类型 (Type) | 默认值 (Default) | 说明 (Description) |
@@ -50,27 +50,18 @@ This is a **multi-platform video/image parsing plugin** developed for the Koishi
 | `showMusicCover` | boolean | true | 发送音乐封面图片 (Send music cover image) |
 | `showVideoFile` | boolean | true | 视频是否以视频形式发送（关闭则只发送链接）(Send video as file, otherwise link only) |
 | `sendLiveMessage` | boolean | true | 直播作品发送文字消息（不发送视频）(Send text message for live streams, no video) |
-| `forceDownloadCover` | boolean | false | 强制下载封面 (Force download cover) |
-| `forceDownloadImageNew` | boolean | false | 强制下载图片 (Force download images) |
-| `forceDownloadAuthorAvatar` | boolean | false | 强制下载作者头像 (Force download author avatar) |
-| `forceDownloadVideo` | boolean | false | 强制下载视频 (Force download video) |
 
-### 音乐语音（需 silk 和 ffmpeg）(Music Voice - requires silk & ffmpeg)
+### 音乐语音 (Music Voice)
 | 配置项 (Config) | 类型 (Type) | 默认值 (Default) | 说明 (Description) |
 |----------------|-------------|-------------------|---------------------|
 | `showMusicVoice` | boolean | false | 音乐链接以语音发送 (Send music as voice) |
 | `showMusicVoiceFile` | boolean | true | 音乐链接是否以语音形式发送（关闭则只发送链接）(Send as voice file, otherwise link only) |
-| `forceDownloadMusicVoice` | boolean | false | 强制下载音乐语音 (Force download music voice) |
 
 ### 性能与限制 (Performance & Limits)
 | 配置项 (Config) | 类型 (Type) | 默认值 (Default) | 说明 (Description) |
 |----------------|-------------|-------------------|---------------------|
 | `maxDescLength` | number | 200 | 简介长度上限 (Max description length) |
 | `maxConcurrent` | number | 3 | 解析最大并发数 (Max concurrent parsing) |
-| `downloadConcurrency` | number | 3 | 下载线程数 (Download concurrency) |
-| `mediaDownloadTimeout` | number | 120000 | 统一下载超时 (ms) (Download timeout) |
-| `maxMediaSize` | number | 0 | 最大下载文件大小 (MB)，0 为不限制 (Max file size, 0 = unlimited) |
-| `downloadEngine` | string | internal | 下载引擎（internal / aria2 / downloads）(Download engine) |
 
 ### 网络与请求 (Network & Request)
 | 配置项 (Config) | 类型 (Type) | 默认值 (Default) | 说明 (Description) |
@@ -89,12 +80,12 @@ This is a **multi-platform video/image parsing plugin** developed for the Koishi
 | `retryInterval` | number | 1000 | 重试间隔 (ms) (Retry interval) |
 | `enableForward` | boolean | false | 合并转发（OneBot/Satori）(Enable forward message) |
 
-### 缓存与临时文件 (Cache & Temp Files)
+### 缓存与去重 (Cache & Deduplication)
 | 配置项 (Config) | 类型 (Type) | 默认值 (Default) | 说明 (Description) |
 |----------------|-------------|-------------------|---------------------|
+| `enableDeduplication` | boolean | true | 启用重复解析检测与提示 (Enable duplicate detection) |
 | `deduplicationInterval` | number | 180 | 去重间隔 (s) (Deduplication interval) |
 | `cacheTTL` | number | 600 | 缓存时间 (s) (Cache TTL) |
-| `cacheDir` | string | ./temp_cache | 统一临时目录 (Temp directory) |
 
 ### API 与平台 (API & Platforms)
 | 配置项 (Config) | 类型 (Type) | 默认值 (Default) | 说明 (Description) |
@@ -112,10 +103,12 @@ This is a **multi-platform video/image parsing plugin** developed for the Koishi
 | `invalidLinkText` | string | 无效链接 | 无效链接提示 (Invalid link tip) |
 | `parseErrorPrefix` | string | ❌ 解析失败： | 错误前缀 (Error prefix) |
 | `parseErrorItemFormat` | string | ... | 错误格式 (Error format) |
+| `deduplicationTipText` | string | 链接 ${url} 在最近 ${interval} 秒内已解析过，已跳过。 | 重复解析提示 (Duplication tip) |
 
 ## 支持的变量 (Supported Variables)
-在 `unifiedMessageFormat` 中可使用以下变量，空行自动隐藏。  
-The following variables can be used in `unifiedMessageFormat`, empty lines are auto-hidden.
+
+> 在 `unifiedMessageFormat` 中可使用以下变量，空行自动隐藏。  
+> The following variables can be used in `unifiedMessageFormat`, empty lines are auto-hidden.
 
 | 变量 (Variable) | 说明 (Description) |
 |----------------|--------------------|
@@ -133,21 +126,6 @@ The following variables can be used in `unifiedMessageFormat`, empty lines are a
 | `${作者ID}` | 作者唯一标识ID (Author ID) |
 | `${音乐标题}` | 音乐标题 (Music title) |
 | `${音乐作者}` | 音乐作者 (Music author) |
-
-## 依赖说明 (Dependencies)
-### 音乐语音（可选）(Music Voice - Optional)
-若启用 `showMusicVoice`，请安装：  
-If you enable `showMusicVoice`, please install:  
-- `koishi-plugin-silk`：silk 编解码 (Silk codec)  
-- `koishi-plugin-ffmpeg`：音频重采样 (Audio resampling)  
-
-### aria2 下载引擎（可选）(aria2 Download Engine - Optional)
-若启用 `downloadEngine: 'aria2'`，请安装可选依赖 `koishi-plugin-aria2-plus` 并配置该插件连接 aria2 服务。插件启动时会自动检测该服务，未安装或不可用时将降级为内置下载，不影响正常使用。  
-If you use `downloadEngine: 'aria2'`, please install the optional dependency `koishi-plugin-aria2-plus` and configure it to connect to an aria2 service. The plugin will auto-detect it; if not available, it will fall back to the built-in downloader without affecting normal usage.
-
-### downloads 服务（可选）(Downloads Service - Optional)
-若启用 `downloadEngine: 'downloads'`，请安装可选依赖 `koishi-plugin-downloads`，失败时回退到内置下载。  
-If you use `downloadEngine: 'downloads'`, please install the optional dependency `koishi-plugin-downloads`. It will fall back to the built-in downloader on failure.
 
 ## 支持的平台 (Supported Platforms)
 
