@@ -190,7 +190,7 @@ If you use `downloadEngine: 'downloads'`, please install the optional dependency
 |----------------------|-------------------------|
 | Minecraft-1314 | 插件完整开发 (Complete plugin development) |
 | ShiraiKuroko003 | 修复消息格式设置问题并且PR-1.2.5版本已修复 (Fixed message format issue, PR-1.2.5) |
-| cyavb | 提交功能建议-给自定义API添加KEY认证-已修复 (Suggested custom API key auth - fixed) |
+| cyavb | 提交功能建议-给自定义API添加KEY认证-已采纳 (Suggested custom API key auth - adopted) |
 | Keep785 | 提交Bug-无法正常关闭发送封面-已修复<br>提交Bug-解析问题-已修复 (Reported bug - cannot disable cover sending - fixed<br>Reported bug - parsing issue - fixed) |
 | dzt2008 + Apricityx | 提交Bug-会对非支持视频平台URL进行误解析-已修复 (Reported incorrect parsing of unsupported URLs - fixed) |
 | linyves | 提交Bug-小红书图集重复发送封面-已修复<br>提交Bug-话题显示异常 #**[话题]#-已修复<br>提交建议-Live Photo 全部按普通图片处理-已采纳<br>提交Bug-解析后会把作者头像一起发送-已修复 (Reported bug - duplicate cover for Xiaohongshu image posts - fixed<br>Reported bug - abnormal topic display #**[topic]# - fixed<br>Suggestion - treat Live Photos as normal images - adopted<br>Reported bug - author avatar sent together after parsing - fixed) |
