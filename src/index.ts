@@ -1197,12 +1197,16 @@ export function apply(ctx: Context, config: any) {
         if (config.showAuthorAvatar && p.avatar && config.showAuthorAvatarText) {
           text = text ? text + '\n' + (config.authorAvatarText || '作者头像：') : (config.authorAvatarText || '作者头像：')
         }
-        if (text && config.showImageText) forwardMessages.push(buildForwardNode(session, text, botName))
+        if (text && config.showImageText) {
+          forwardMessages.push(buildForwardNode(session, text, botName))
+        }
         if (config.showAuthorAvatar && p.avatar) {
           forwardMessages.push(buildForwardNode(session, h.image(p.avatar), botName))
         }
         if (p.cover && config.showCoverImage && p.type !== 'live_photo' && p.type !== 'image' && p.type !== 'live') {
-          if (config.showCoverText) forwardMessages.push(buildForwardNode(session, config.coverText || '封面：', botName))
+          if (config.showCoverText) {
+            forwardMessages.push(buildForwardNode(session, config.coverText || '封面：', botName))
+          }
           forwardMessages.push(buildForwardNode(session, h.image(p.cover), botName))
         }
         if (config.showMusicCover && p.music.cover) {
@@ -1210,9 +1214,13 @@ export function apply(ctx: Context, config: any) {
         }
         if (p.type === 'image' || p.type === 'live_photo' || (p.type === 'live' && (p.live_photo?.length || p.images?.length))) {
           const imageUrls = p.images?.length ? p.images : (p.live_photo?.map(lp => lp.image) ?? [])
-          for (const imgUrl of imageUrls) forwardMessages.push(buildForwardNode(session, h.image(imgUrl), botName))
+          for (const imgUrl of imageUrls) {
+            forwardMessages.push(buildForwardNode(session, h.image(imgUrl), botName))
+          }
         }
-        if (p.video && p.type !== 'live') forwardMessages.push(buildForwardNode(session, h.video(p.video), botName))
+        if (p.video && p.type !== 'live') {
+          forwardMessages.push(buildForwardNode(session, h.video(p.video), botName))
+        }
         if (config.showMusicVoice && p.music.url) {
           forwardMessages.push(buildForwardNode(session, h.audio(p.music.url), botName))
         }
