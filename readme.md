@@ -40,13 +40,16 @@ This is a **multi-platform video/image parsing plugin** developed for the Koishi
 | `showImageText` | boolean | true | 发送文字内容 (Send text content) |
 | `showCoverImage` | boolean | true | 发送封面图片 (Send cover image) |
 | `showCoverFile` | boolean | true | 封面是否以图片形式发送（关闭则只发送链接）(Send cover as image, otherwise link only) |
+| `showCoverText` | boolean | true | 发送封面前显示文字提示 (Show text hint before cover image) |
+| `coverText` | string | 封面： | 封面前显示的文字 (Text displayed before cover) |
 | `showImageFileNew` | boolean | true | 图片是否以图片形式发送（关闭则只发送链接）(Send images as image, otherwise link only) |
 | `showAuthorAvatar` | boolean | true | 发送作者头像图片 (Send author avatar image) |
 | `showAuthorAvatarFile` | boolean | true | 作者头像图片是否以图片形式发送（关闭则只发送链接）(Send author avatar as image, otherwise link only) |
-| `showAuthorAvatarText` | boolean | true | 发送作者头像前显示文字提示 (Show text hint before author avatar) |
+| `showAuthorAvatarText` | boolean | true | 作者头像前显示文字提示（将追加到文字消息末尾）(Show text hint before author avatar, appended to the text message) |
 | `authorAvatarText` | string | 作者头像： | 作者头像前显示的文字 (Text displayed before author avatar) |
 | `showMusicCover` | boolean | true | 发送音乐封面图片 (Send music cover image) |
 | `showVideoFile` | boolean | true | 视频是否以视频形式发送（关闭则只发送链接）(Send video as file, otherwise link only) |
+| `sendLiveMessage` | boolean | true | 直播作品发送文字消息（不发送视频）(Send text message for live streams, no video) |
 | `forceDownloadCover` | boolean | false | 强制下载封面 (Force download cover) |
 | `forceDownloadImageNew` | boolean | false | 强制下载图片 (Force download images) |
 | `forceDownloadAuthorAvatar` | boolean | false | 强制下载作者头像 (Force download author avatar) |

@@ -102,10 +102,12 @@ export const Config = Schema.intersect([
     showImageText: Schema.boolean().default(true).description('发送文字内容'),
     showCoverImage: Schema.boolean().default(true).description('发送封面图片'),
     showCoverFile: Schema.boolean().default(true).description('封面是否以图片形式发送（关闭则只发送链接）'),
+    showCoverText: Schema.boolean().default(true).description('发送封面前显示文字提示'),
+    coverText: Schema.string().default('封面：').description('封面前显示的文字'),
     showImageFileNew: Schema.boolean().default(true).description('图片是否以图片形式发送（关闭则只发送链接）'),
     showAuthorAvatar: Schema.boolean().default(true).description('发送作者头像图片'),
     showAuthorAvatarFile: Schema.boolean().default(true).description('作者头像图片是否以图片形式发送（关闭则只发送链接）'),
-    showAuthorAvatarText: Schema.boolean().default(true).description('发送作者头像前显示文字提示'),
+    showAuthorAvatarText: Schema.boolean().default(true).description('作者头像前显示文字提示（将追加到文字消息末尾）'),
     authorAvatarText: Schema.string().default('作者头像：').description('作者头像前显示的文字'),
     showMusicCover: Schema.boolean().default(true).description('发送音乐封面图片'),
     showVideoFile: Schema.boolean().default(true).description('视频是否以视频形式发送（关闭则只发送链接）'),
@@ -1191,15 +1193,16 @@ export function apply(ctx: Context, config: any) {
       const forwardMessages: any[] = []
       for (const item of items) {
         const p = item.parsed
-        const text = item.text
-        if (text && config.showImageText) forwardMessages.push(buildForwardNode(session, text, botName))
+        let text = item.text
         if (config.showAuthorAvatar && p.avatar && config.showAuthorAvatarText) {
-          forwardMessages.push(buildForwardNode(session, config.authorAvatarText || '作者头像：', botName))
+          text = text ? text + '\n' + (config.authorAvatarText || '作者头像：') : (config.authorAvatarText || '作者头像：')
         }
+        if (text && config.showImageText) forwardMessages.push(buildForwardNode(session, text, botName))
         if (config.showAuthorAvatar && p.avatar) {
           forwardMessages.push(buildForwardNode(session, h.image(p.avatar), botName))
         }
         if (p.cover && config.showCoverImage && p.type !== 'live_photo' && p.type !== 'image' && p.type !== 'live') {
+          if (config.showCoverText) forwardMessages.push(buildForwardNode(session, config.coverText || '封面：', botName))
           forwardMessages.push(buildForwardNode(session, h.image(p.cover), botName))
         }
         if (config.showMusicCover && p.music.cover) {
@@ -1228,17 +1231,17 @@ export function apply(ctx: Context, config: any) {
     } else {
       for (const item of items) {
         const p = item.parsed
-        const text = item.text
-        if (text && config.showImageText) { await sendWithTimeout(session, text); await delay(300) }
+        let text = item.text
         if (config.showAuthorAvatar && p.avatar && config.showAuthorAvatarText) {
-          await sendWithTimeout(session, config.authorAvatarText || '作者头像：')
-          await delay(300)
+          text = text ? text + '\n' + (config.authorAvatarText || '作者头像：') : (config.authorAvatarText || '作者头像：')
         }
+        if (text && config.showImageText) { await sendWithTimeout(session, text); await delay(300) }
         if (config.showAuthorAvatar && p.avatar) {
           await sendMedia(session, p.avatar, 'image', config.forceDownloadAuthorAvatar, config.showAuthorAvatarFile).catch(() => {})
           await delay(300)
         }
         if (p.cover && config.showCoverImage && p.type !== 'live_photo' && p.type !== 'image' && p.type !== 'live') {
+          if (config.showCoverText) await sendWithTimeout(session, config.coverText || '封面：')
           await sendMedia(session, p.cover, 'image', config.forceDownloadCover, config.showCoverFile).catch(() => {})
           await delay(300)
         }
