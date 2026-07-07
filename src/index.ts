@@ -130,7 +130,7 @@ export const Config = Schema.intersect([
     downloadEngine: Schema.union([
       Schema.const('internal').description('内置下载'),
       Schema.const('aria2').description('aria2 下载（需 koishi-plugin-aria2-plus）'),
-      Schema.const('downloads').description('downloads 服务下载'),
+      Schema.const('downloads').description('downloads 服务下载（需 koishi-plugin-downloads）'),
     ]).default('internal').description('下载引擎'),
   }).description('性能与限制'),
 
@@ -1167,8 +1167,10 @@ export function apply(ctx: Context, config: any) {
         const p = item.parsed
         const text = item.text
         if (text && config.showImageText) forwardMessages.push(buildForwardNode(session, text, botName))
+        if (config.showAuthorAvatar && p.avatar && config.showAuthorAvatarText) {
+          forwardMessages.push(buildForwardNode(session, config.authorAvatarText || '作者头像：', botName))
+        }
         if (config.showAuthorAvatar && p.avatar) {
-          if (config.showAuthorAvatarText) forwardMessages.push(buildForwardNode(session, config.authorAvatarText || '作者头像：', botName))
           forwardMessages.push(buildForwardNode(session, h.image(p.avatar), botName))
         }
         if (p.cover && config.showCoverImage && p.type !== 'live_photo' && p.type !== 'image' && !(p.type === 'live' && (p.live_photo?.length || p.images?.length))) {
@@ -1202,8 +1204,11 @@ export function apply(ctx: Context, config: any) {
         const p = item.parsed
         const text = item.text
         if (text && config.showImageText) { await sendWithTimeout(session, text); await delay(300) }
+        if (config.showAuthorAvatar && p.avatar && config.showAuthorAvatarText) {
+          await sendWithTimeout(session, config.authorAvatarText || '作者头像：')
+          await delay(300)
+        }
         if (config.showAuthorAvatar && p.avatar) {
-          if (config.showAuthorAvatarText) await sendWithTimeout(session, config.authorAvatarText || '作者头像：')
           await sendMedia(session, p.avatar, 'image', config.forceDownloadAuthorAvatar, config.showAuthorAvatarFile).catch(() => {})
           await delay(300)
         }
