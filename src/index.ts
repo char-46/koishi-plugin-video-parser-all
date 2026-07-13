@@ -347,69 +347,76 @@ const logger = new Logger(name)
 let debugEnabled = false
 function debugLog(level: string, ...args: any[]) {
   if (!debugEnabled) return
-  logger.info(`[${new Date().toISOString()}] [${level}] ${args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')}`)
+  const safe = args.map(a => {
+    try {
+      return typeof a === 'object' ? JSON.stringify(a) : String(a)
+    } catch {
+      return '[unserializable]'
+    }
+  })
+  logger.info(`[${new Date().toISOString()}] [${level}] ${safe.join(' ')}`)
 }
 
 const BUILTIN_LINK_RULES: { pattern: RegExp; type: string }[] = [
-  { pattern: /https?:\/\/(?:www\.)?bilibili\.com\/video\/([ab]v[0-9a-zA-Z_-]+)[^\s]*/gi, type: 'bilibili' },
-  { pattern: /https?:\/\/b23\.tv\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'bilibili' },
-  { pattern: /https?:\/\/bili\d+\.cn\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'bilibili' },
-  { pattern: /https?:\/\/b23\.wtf\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'bilibili' },
-  { pattern: /https?:\/\/bili2233\.cn\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'bilibili' },
-  { pattern: /https?:\/\/(?:www\.)?douyin\.com\/video\/\d{10,}[^\s]*/gi, type: 'douyin' },
-  { pattern: /https?:\/\/v\.douyin\.com\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'douyin' },
-  { pattern: /https?:\/\/(?:www\.)?kuaishou\.com\/short-video\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'kuaishou' },
-  { pattern: /https?:\/\/v\.kuaishou\.com\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'kuaishou' },
-  { pattern: /https?:\/\/(?:www\.)?kuaishou\.com\/f\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'kuaishou' },
-  { pattern: /https?:\/\/(?:www\.)?xiaohongshu\.com\/discovery\/item\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'xiaohongshu' },
-  { pattern: /https?:\/\/xhslink\.com\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'xiaohongshu' },
-  { pattern: /https?:\/\/(?:www\.)?xiaohongshu\.com\/explore\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'xiaohongshu' },
-  { pattern: /https?:\/\/(?:www\.)?xiaohongshu\.com\/board\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'xiaohongshu' },
-  { pattern: /https?:\/\/weibo\.com\/\d+\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'weibo' },
-  { pattern: /https?:\/\/video\.weibo\.com\/show\?fid=[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'weibo' },
-  { pattern: /https?:\/\/t\.cn\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'weibo' },
-  { pattern: /https?:\/\/m\.weibo\.cn\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'weibo' },
-  { pattern: /https?:\/\/(?:www\.)?ixigua\.com\/\d{10,}[^\s]*/gi, type: 'xigua' },
-  { pattern: /https?:\/\/(?:www\.)?youtube\.com\/watch\?v=[a-zA-Z0-9_-]{11}[^\s]*/gi, type: 'youtube' },
-  { pattern: /https?:\/\/youtu\.be\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'youtube' },
-  { pattern: /https?:\/\/(?:www\.)?youtube\.com\/shorts\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'youtube' },
-  { pattern: /https?:\/\/(?:www\.)?tiktok\.com\/@[\w.]+\/video\/\d{10,}[^\s]*/gi, type: 'tiktok' },
-  { pattern: /https?:\/\/vm\.tiktok\.com\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'tiktok' },
-  { pattern: /https?:\/\/vt\.tiktok\.com\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'tiktok' },
-  { pattern: /https?:\/\/(?:www\.)?acfun\.cn\/v\/ac\d{10,}[^\s]*/gi, type: 'acfun' },
-  { pattern: /https?:\/\/(?:www\.)?zhihu\.com\/video\/\d{10,}[^\s]*/gi, type: 'zhihu' },
-  { pattern: /https?:\/\/(?:www\.|m\.)?zhihu\.com\/question\/\d+\/answer\/\d+[^\s]*/gi, type: 'zhihu' },
-  { pattern: /https?:\/\/zhuanlan\.zhihu\.com\/p\/\d+[^\s]*/gi, type: 'zhihu' },
-  { pattern: /https?:\/\/(?:www\.|m\.)?zhihu\.com\/zvideo\/\d+[^\s]*/gi, type: 'zhihu' },
-  { pattern: /https?:\/\/weishi\.qq\.com\/weishi\/feed\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'weishi' },
-  { pattern: /https?:\/\/(?:www\.)?huya\.com\/video\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'huya' },
-  { pattern: /https?:\/\/haokan\.baidu\.com\/v\?vid=[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'haokan' },
-  { pattern: /https?:\/\/(?:www\.)?meipai\.com\/media\/\d{10,}[^\s]*/gi, type: 'meipai' },
-  { pattern: /https?:\/\/twitter\.com\/\w+\/status\/\d{10,}[^\s]*/gi, type: 'twitter' },
-  { pattern: /https?:\/\/x\.com\/\w+\/status\/\d{10,}[^\s]*/gi, type: 'twitter' },
-  { pattern: /https?:\/\/(?:www\.)?instagram\.com\/p\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'instagram' },
-  { pattern: /https?:\/\/(?:www\.)?instagram\.com\/reel\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'instagram' },
-  { pattern: /https?:\/\/(?:www\.)?instagram\.com\/share\/(?:reel|p)\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'instagram' },
-  { pattern: /https?:\/\/(?:www\.)?doubao\.com\/video\/\d{10,}[^\s]*/gi, type: 'doubao' },
-  { pattern: /https?:\/\/(?:www\.)?doubao\.com\/video-sharing\?[^\s]*/gi, type: 'doubao' },
-  { pattern: /https?:\/\/(?:www\.)?doubao\.com\/thread\/[^\s]+/gi, type: 'doubao_image' },
-  { pattern: /https?:\/\/(?:www\.)?jimeng\.jianying\.com\/[^\s]*/gi, type: 'jimeng' },
-  { pattern: /https?:\/\/(?:www\.)?jimeng\.cn\/[^\s]*/gi, type: 'jimeng' },
-  { pattern: /https?:\/\/(?:www\.)?dreamina\.jianying\.com\/[^\s]*/gi, type: 'jimeng' },
-  { pattern: /https?:\/\/(?:www\.)?dreamina\.capcut\.com\/[^\s]*/gi, type: 'jimeng' },
-  { pattern: /https?:\/\/(?:www\.)?oasis\.weibo\.com\/v\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'oasis' },
-  { pattern: /https?:\/\/channels\.weixin\.qq\.com\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'wechat_channel' },
-  { pattern: /https?:\/\/weixin\.qq\.com\/sph\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'wechat_channel' },
-  { pattern: /https?:\/\/(?:www\.)?pearvideo\.com\/video_\d+[^\s]*/gi, type: 'lishi' },
-  { pattern: /https?:\/\/video\.li\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'lishi' },
-  { pattern: /https?:\/\/(?:www\.)?quanmin\.tv\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'quanmin' },
-  { pattern: /https?:\/\/(?:www\.)?quanmintv\.cn\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'quanmin' },
-  { pattern: /https?:\/\/h5\.pipigx\.com\/pp\/post\/\d+[^\s]*/gi, type: 'pipigx' },
-  { pattern: /https?:\/\/(?:www\.)?ippzone\.com\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'pipigx' },
-  { pattern: /https?:\/\/(?:h5|www)\.pipix\.com\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'pipixia' },
-  { pattern: /https?:\/\/(?:www\.)?pipixia\.com\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'pipixia' },
-  { pattern: /https?:\/\/share\.xiaochuankeji\.cn\/hybrid\/share\/post\?pid=\d+[^\s]*/gi, type: 'zuiyou' },
-  { pattern: /https?:\/\/(?:h5|www)\.izuiyou\.com\/[0-9a-zA-Z_\/-]+[^\s]*/gi, type: 'zuiyou' },
+  { pattern: /https?:\/\/(?:www\.)?bilibili\.com\/video\/([ab]v[0-9a-zA-Z_-]+)(?:\?[^\s'"“”‘’]*)?/gi, type: 'bilibili' },
+  { pattern: /https?:\/\/b23\.tv\/[0-9a-zA-Z_\/-]+/gi, type: 'bilibili' },
+  { pattern: /https?:\/\/bili\d+\.cn\/[0-9a-zA-Z_\/-]+/gi, type: 'bilibili' },
+  { pattern: /https?:\/\/b23\.wtf\/[0-9a-zA-Z_\/-]+/gi, type: 'bilibili' },
+  { pattern: /https?:\/\/bili2233\.cn\/[0-9a-zA-Z_\/-]+/gi, type: 'bilibili' },
+  { pattern: /https?:\/\/(?:www\.)?douyin\.com\/video\/\d{10,}/gi, type: 'douyin' },
+  { pattern: /https?:\/\/v\.douyin\.com\/[0-9a-zA-Z_\/-]+/gi, type: 'douyin' },
+  { pattern: /https?:\/\/(?:www\.)?kuaishou\.com\/short-video\/[0-9a-zA-Z_\/-]+/gi, type: 'kuaishou' },
+  { pattern: /https?:\/\/v\.kuaishou\.com\/[0-9a-zA-Z_\/-]+/gi, type: 'kuaishou' },
+  { pattern: /https?:\/\/(?:www\.)?kuaishou\.com\/f\/[0-9a-zA-Z_\/-]+/gi, type: 'kuaishou' },
+  { pattern: /https?:\/\/(?:www\.)?xiaohongshu\.com\/discovery\/item\/[0-9a-zA-Z_\/-]+/gi, type: 'xiaohongshu' },
+  { pattern: /https?:\/\/xhslink\.com\/[0-9a-zA-Z_\/-]+/gi, type: 'xiaohongshu' },
+  { pattern: /https?:\/\/(?:www\.)?xiaohongshu\.com\/explore\/[0-9a-zA-Z_\/-]+/gi, type: 'xiaohongshu' },
+  { pattern: /https?:\/\/(?:www\.)?xiaohongshu\.com\/board\/[0-9a-zA-Z_\/-]+/gi, type: 'xiaohongshu' },
+  { pattern: /https?:\/\/weibo\.com\/\d+\/[0-9a-zA-Z_\/-]+/gi, type: 'weibo' },
+  { pattern: /https?:\/\/video\.weibo\.com\/show\?fid=[0-9a-zA-Z_\/-]+/gi, type: 'weibo' },
+  { pattern: /https?:\/\/t\.cn\/[0-9a-zA-Z_\/-]+/gi, type: 'weibo' },
+  { pattern: /https?:\/\/m\.weibo\.cn\/[0-9a-zA-Z_\/-]+/gi, type: 'weibo' },
+  { pattern: /https?:\/\/(?:www\.)?ixigua\.com\/\d{10,}/gi, type: 'xigua' },
+  { pattern: /https?:\/\/(?:www\.)?youtube\.com\/watch\?v=[a-zA-Z0-9_-]{11}/gi, type: 'youtube' },
+  { pattern: /https?:\/\/youtu\.be\/[0-9a-zA-Z_\/-]+/gi, type: 'youtube' },
+  { pattern: /https?:\/\/(?:www\.)?youtube\.com\/shorts\/[0-9a-zA-Z_\/-]+/gi, type: 'youtube' },
+  { pattern: /https?:\/\/(?:www\.)?tiktok\.com\/@[\w.]+\/video\/\d{10,}/gi, type: 'tiktok' },
+  { pattern: /https?:\/\/vm\.tiktok\.com\/[0-9a-zA-Z_\/-]+/gi, type: 'tiktok' },
+  { pattern: /https?:\/\/vt\.tiktok\.com\/[0-9a-zA-Z_\/-]+/gi, type: 'tiktok' },
+  { pattern: /https?:\/\/(?:www\.)?acfun\.cn\/v\/ac\d{10,}/gi, type: 'acfun' },
+  { pattern: /https?:\/\/(?:www\.)?zhihu\.com\/video\/\d{10,}/gi, type: 'zhihu' },
+  { pattern: /https?:\/\/(?:www\.|m\.)?zhihu\.com\/question\/\d+\/answer\/\d+/gi, type: 'zhihu' },
+  { pattern: /https?:\/\/zhuanlan\.zhihu\.com\/p\/\d+/gi, type: 'zhihu' },
+  { pattern: /https?:\/\/(?:www\.|m\.)?zhihu\.com\/zvideo\/\d+/gi, type: 'zhihu' },
+  { pattern: /https?:\/\/weishi\.qq\.com\/weishi\/feed\/[0-9a-zA-Z_\/-]+/gi, type: 'weishi' },
+  { pattern: /https?:\/\/(?:www\.)?huya\.com\/video\/[0-9a-zA-Z_\/-]+/gi, type: 'huya' },
+  { pattern: /https?:\/\/haokan\.baidu\.com\/v\?vid=[0-9a-zA-Z_\/-]+/gi, type: 'haokan' },
+  { pattern: /https?:\/\/(?:www\.)?meipai\.com\/media\/\d{10,}/gi, type: 'meipai' },
+  { pattern: /https?:\/\/twitter\.com\/\w+\/status\/\d{10,}/gi, type: 'twitter' },
+  { pattern: /https?:\/\/x\.com\/\w+\/status\/\d{10,}/gi, type: 'twitter' },
+  { pattern: /https?:\/\/(?:www\.)?instagram\.com\/p\/[0-9a-zA-Z_\/-]+/gi, type: 'instagram' },
+  { pattern: /https?:\/\/(?:www\.)?instagram\.com\/reel\/[0-9a-zA-Z_\/-]+/gi, type: 'instagram' },
+  { pattern: /https?:\/\/(?:www\.)?instagram\.com\/share\/(?:reel|p)\/[0-9a-zA-Z_\/-]+/gi, type: 'instagram' },
+  { pattern: /https?:\/\/(?:www\.)?doubao\.com\/video\/\d{10,}/gi, type: 'doubao' },
+  { pattern: /https?:\/\/(?:www\.)?doubao\.com\/video-sharing\?[^\s'"“”‘’]*/gi, type: 'doubao' },
+  { pattern: /https?:\/\/(?:www\.)?doubao\.com\/thread\/[^\s'"“”‘’]+/gi, type: 'doubao_image' },
+  { pattern: /https?:\/\/(?:www\.)?jimeng\.jianying\.com\/[^\s'"“”‘’]*/gi, type: 'jimeng' },
+  { pattern: /https?:\/\/(?:www\.)?jimeng\.cn\/[^\s'"“”‘’]*/gi, type: 'jimeng' },
+  { pattern: /https?:\/\/(?:www\.)?dreamina\.jianying\.com\/[^\s'"“”‘’]*/gi, type: 'jimeng' },
+  { pattern: /https?:\/\/(?:www\.)?dreamina\.capcut\.com\/[^\s'"“”‘’]*/gi, type: 'jimeng' },
+  { pattern: /https?:\/\/(?:www\.)?oasis\.weibo\.com\/v\/[0-9a-zA-Z_\/-]+/gi, type: 'oasis' },
+  { pattern: /https?:\/\/channels\.weixin\.qq\.com\/[0-9a-zA-Z_\/-]+/gi, type: 'wechat_channel' },
+  { pattern: /https?:\/\/weixin\.qq\.com\/sph\/[0-9a-zA-Z_\/-]+/gi, type: 'wechat_channel' },
+  { pattern: /https?:\/\/(?:www\.)?pearvideo\.com\/video_\d+/gi, type: 'lishi' },
+  { pattern: /https?:\/\/video\.li\/[0-9a-zA-Z_\/-]+/gi, type: 'lishi' },
+  { pattern: /https?:\/\/(?:www\.)?quanmin\.tv\/[0-9a-zA-Z_\/-]+/gi, type: 'quanmin' },
+  { pattern: /https?:\/\/(?:www\.)?quanmintv\.cn\/[0-9a-zA-Z_\/-]+/gi, type: 'quanmin' },
+  { pattern: /https?:\/\/h5\.pipigx\.com\/pp\/post\/\d+/gi, type: 'pipigx' },
+  { pattern: /https?:\/\/(?:www\.)?ippzone\.com\/[0-9a-zA-Z_\/-]+/gi, type: 'pipigx' },
+  { pattern: /https?:\/\/(?:h5|www)\.pipix\.com\/[0-9a-zA-Z_\/-]+/gi, type: 'pipixia' },
+  { pattern: /https?:\/\/(?:www\.)?pipixia\.com\/[0-9a-zA-Z_\/-]+/gi, type: 'pipixia' },
+  { pattern: /https?:\/\/share\.xiaochuankeji\.cn\/hybrid\/share\/post\?pid=\d+/gi, type: 'zuiyou' },
+  { pattern: /https?:\/\/(?:h5|www)\.izuiyou\.com\/[0-9a-zA-Z_\/-]+/gi, type: 'zuiyou' },
 ]
 
 function buildCustomLinkRules(customPlatforms: any[]): { pattern: RegExp; type: string }[] {
@@ -420,7 +427,7 @@ function buildCustomLinkRules(customPlatforms: any[]): { pattern: RegExp; type: 
       const keywords = p.keywords.split(',').map((s: string) => s.trim()).filter(Boolean)
       if (keywords.length === 0) return null
       const escaped = keywords.map((k: string) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-      const pattern = new RegExp('https?://[^/\\s]*(' + escaped.join('|') + ')[^\\s]*', 'gi')
+      const pattern = new RegExp(`https?://[^/\\s"'“”‘’]*(${escaped.join('|')})[^\\s"'“”‘’]*`, 'gi')
       return { pattern, type: `custom_${p.name}` }
     })
     .filter(Boolean) as { pattern: RegExp; type: string }[]
@@ -435,7 +442,9 @@ function linkTypeParser(content: string, customRules: { pattern: RegExp; type: s
     let match: RegExpExecArray | null
     rule.pattern.lastIndex = 0
     while ((match = rule.pattern.exec(content)) !== null) {
-      const url = match[0]
+      let url = match[0]
+      url = cleanUrl(url)
+      if (!url) continue
       if (seen.has(url)) continue
       seen.add(url)
       matches.push({ type: rule.type, url, id: match[1] || url })
@@ -450,8 +459,8 @@ function cleanUrl(url: string): string {
             .replace(/&lt;/g, '<')
             .replace(/&gt;/g, '>')
             .replace(/\\\//g, '/')
-  url = url.replace(/^[\s"'<]+/, '')
-  url = url.replace(/[\s"'<>\{\}\[\]`,;]+$/, '')
+  url = url.replace(/^[\s"'<“”‘’]+/, '')
+  url = url.replace(/[\s"'<>\{\}\[\]`,;，。！？：；“”‘’…—～]+$/, '')
   if (!/^https?:\/\//i.test(url)) {
     if (/^\/\//.test(url)) url = 'https:' + url
     else return url
@@ -689,7 +698,7 @@ function parseApiResponse(raw: any, maxDescLen: number, fieldMapping?: Record<st
 }
 
 const formatVarRegex = /\$\{([^}]+)\}/g
-function generateFormattedText(p: ParsedData, format: string): string {
+function generateFormattedText(p: ParsedData, format: string, index?: number, total?: number): string {
   const imageCount = p.images.length || p.live_photo.length
   const vars: Record<string, string> = {
     '标题': p.title,
@@ -708,11 +717,6 @@ function generateFormattedText(p: ParsedData, format: string): string {
     '音乐作者': p.music.author || '',
   }
 
-  const varReplacements = Object.entries(vars).map(([key, val]) => ({
-    regex: new RegExp(`\\$\\{${key}\\}`, 'g'),
-    value: val,
-  }))
-
   const lines = format.split('\n')
   const resultLines: string[] = []
   for (const line of lines) {
@@ -730,12 +734,16 @@ function generateFormattedText(p: ParsedData, format: string): string {
       if (allEmptyOrZero) continue
     }
     let newLine = line
-    for (const { regex, value } of varReplacements) {
-      newLine = newLine.replace(regex, value)
+    for (const [key, val] of Object.entries(vars)) {
+      newLine = newLine.replace(new RegExp(`\\$\\{${key}\\}`, 'g'), val)
     }
     resultLines.push(newLine)
   }
-  return resultLines.join('\n').trim()
+  let text = resultLines.join('\n').trim()
+  if (index !== undefined && total !== undefined && total > 1) {
+    text = `【${index}/${total}】\n${text}`
+  }
+  return text
 }
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
@@ -866,6 +874,28 @@ export function apply(ctx: Context, config: any) {
     return {}
   }
 
+  async function sendWithTimeout(session: any, content: any, customRetries?: number): Promise<any> {
+    const maxRetries = customRetries ?? config.retryTimes ?? 3
+    const retryDelay = config.retryInterval || 1000
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        let sendPromise = session.send(content)
+        if (config.videoSendTimeout > 0) {
+          const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('发送超时')), config.videoSendTimeout))
+          return await Promise.race([sendPromise, timeoutPromise])
+        } else {
+          return await sendPromise
+        }
+      } catch (err) {
+        const errMsg = getErrorMessage(err)
+        debugLog('ERROR', `发送失败尝试 ${attempt+1}: ${errMsg}`)
+        if (attempt < maxRetries) await delay(retryDelay)
+        else if (!config.ignoreSendError) throw err
+      }
+    }
+    return null
+  }
+
   async function sendMedia(
     session: any,
     url: string,
@@ -937,13 +967,16 @@ export function apply(ctx: Context, config: any) {
     if (errors.length) await sendWithTimeout(session, `${getText('parseErrorPrefix')}\n${errors.join('\n')}`)
     if (!items.length) return
 
+    const totalItems = items.length
     const enableForward = config.enableForward && (session.platform === 'onebot' || session.platform === 'satori')
     const botName = config.botName || '视频解析机器人'
     if (enableForward) {
       const forwardMessages: any[] = []
-      for (const item of items) {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i]
         const p = item.parsed
-        let text = item.text
+        const textWithIndex = (totalItems > 1) ? `【${i + 1}/${totalItems}】\n${item.text}` : item.text
+        let text = textWithIndex
         if (config.showAuthorAvatar && p.avatar && config.showAuthorAvatarText) {
           text = text ? text + '\n' + (config.authorAvatarText || '作者头像：') : (config.authorAvatarText || '作者头像：')
         }
@@ -994,9 +1027,11 @@ export function apply(ctx: Context, config: any) {
         }
       }
     } else {
-      for (const item of items) {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i]
         const p = item.parsed
-        let text = item.text
+        const textWithIndex = (totalItems > 1) ? `【${i + 1}/${totalItems}】\n${item.text}` : item.text
+        let text = textWithIndex
         if (config.showAuthorAvatar && p.avatar && config.showAuthorAvatarText) {
           text = text ? text + '\n' + (config.authorAvatarText || '作者头像：') : (config.authorAvatarText || '作者头像：')
         }
@@ -1021,9 +1056,9 @@ export function apply(ctx: Context, config: any) {
           }
         } else if (p.type === 'image' || (p.type === 'live' && (p.live_photo?.length || p.images?.length))) {
           const imageUrls = p.images?.length ? p.images : (p.live_photo?.map(lp => lp.image) ?? [])
-          for (let i = 0; i < imageUrls.length; i++) {
-            logger.info(`[发送] 图片 ${i+1}/${imageUrls.length}`)
-            await sendMedia(session, imageUrls[i], 'image', config.showImageFileNew).catch(() => {})
+          for (let j = 0; j < imageUrls.length; j++) {
+            logger.info(`[发送] 图片 ${j+1}/${imageUrls.length}`)
+            await sendMedia(session, imageUrls[j], 'image', config.showImageFileNew).catch(() => {})
             await delay(1000)
           }
         }
@@ -1121,16 +1156,15 @@ export function apply(ctx: Context, config: any) {
   }
 
   async function parseUrl(url: string, type: string, fieldMapping?: Record<string, string>, platformConf?: any): Promise<{ success: true; data: ParsedData } | { success: false; msg: string }> {
-    const cleanedUrl = cleanUrl(url)
     try {
-      const info = await fetchApi(cleanedUrl, type, fieldMapping, platformConf)
+      const info = await fetchApi(url, type, fieldMapping, platformConf)
       if (info.video || info.images.length > 0 || info.live_photo.length > 0) return { success: true, data: info }
-      debugLog('WARN', `解析成功但无内容: ${cleanedUrl}`)
+      debugLog('WARN', `解析成功但无内容: ${url}`)
+      return { success: false, msg: '解析接口返回空内容' }
     } catch (error) {
-      debugLog('ERROR', `解析失败: ${cleanedUrl}`, getErrorMessage(error))
+      debugLog('ERROR', `解析失败: ${url}`, getErrorMessage(error))
       return { success: false, msg: getErrorMessage(error) }
     }
-    return { success: false, msg: getText('unsupportedPlatformText') }
   }
 
   async function processSingleUrl(url: string, type: string, fieldMapping?: Record<string, string>, platformConf?: any): Promise<{ success: true; data: { text: string; parsed: ParsedData } } | { success: false; msg: string; url: string }> {
@@ -1138,28 +1172,6 @@ export function apply(ctx: Context, config: any) {
     if (!result.success) return { success: false, msg: result.msg, url }
     const text = generateFormattedText(result.data, config.unifiedMessageFormat)
     return { success: true, data: { text, parsed: result.data } }
-  }
-
-  async function sendWithTimeout(session: any, content: any, customRetries?: number): Promise<any> {
-    const maxRetries = customRetries ?? config.retryTimes ?? 3
-    const retryDelay = config.retryInterval || 1000
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        let sendPromise = session.send(content)
-        if (config.videoSendTimeout > 0) {
-          const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('发送超时')), config.videoSendTimeout))
-          return await Promise.race([sendPromise, timeoutPromise])
-        } else {
-          return await sendPromise
-        }
-      } catch (err) {
-        const errMsg = getErrorMessage(err)
-        debugLog('ERROR', `发送失败尝试 ${attempt+1}: ${errMsg}`)
-        if (attempt < maxRetries) await delay(retryDelay)
-        else if (!config.ignoreSendError) throw err
-      }
-    }
-    return null
   }
 
   const customRules = buildCustomLinkRules(config.customPlatforms || [])
@@ -1194,7 +1206,13 @@ export function apply(ctx: Context, config: any) {
     const matches = extractAllUrlsFromMessage(session, customRules)
     if (!matches.length) return
     debugLog('INFO', `检测到 ${matches.length} 个链接`)
-    if (config.showWaitingTip) { try { await sendWithTimeout(session, getText('waitingTipText')) } catch(e) { debugLog('WARN', '等待提示发送失败:', e) } }
+    if (config.showWaitingTip) {
+      try {
+        await sendWithTimeout(session, h.quote(session.messageId) + getText('waitingTipText'))
+      } catch(e) {
+        debugLog('WARN', '等待提示发送失败:', e)
+      }
+    }
     await flush(session, matches)
   })
 
@@ -1202,7 +1220,11 @@ export function apply(ctx: Context, config: any) {
     if (!url) { await sendWithTimeout(session, getText('invalidLinkText')); return }
     const matches = linkTypeParser(url, customRules)
     if (!matches.length) { await sendWithTimeout(session, getText('invalidLinkText')); return }
-    if (config.showWaitingTip) { try { await sendWithTimeout(session, getText('waitingTipText')) } catch {} }
+    if (config.showWaitingTip) { 
+      try { 
+        await sendWithTimeout(session, h.quote(session?.messageId) + getText('waitingTipText')) 
+      } catch {} 
+    }
     await flush(session, matches)
   })
 
