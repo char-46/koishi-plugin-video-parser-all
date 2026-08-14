@@ -37,3 +37,15 @@ export function contentFingerprint(p: ParsedData): string {
   const imgSig = p.images?.length ? p.images.slice(0, 3).join('|') : (p.live_photo?.slice(0, 3).map(lp => lp.image).join('|') || '')
   return [p.type, p.title, p.author, p.uid, p.video, imgSig].map(v => String(v ?? '')).join('::')
 }
+
+export function getText(config: any, key: string): string {
+  const defaults: Record<string, string> = {
+    waitingTipText: '正在解析视频，请稍候...',
+    unsupportedPlatformText: '不支持该平台链接',
+    invalidLinkText: '无效的视频链接',
+    parseErrorPrefix: '❌ 解析失败：',
+    parseErrorItemFormat: '【${url}】: ${msg}',
+    deduplicationTipText: '链接 ${url} 在最近 ${interval} 秒内已解析过，已跳过。',
+  }
+  return config[key] || defaults[key] || ''
+}
