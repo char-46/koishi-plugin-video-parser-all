@@ -19,7 +19,10 @@ export async function fetchApi(rt: ParserRuntime, url: string, type: string, fie
   // X / Twitter：bugpk 统一 API 不支持，走原生 syndication 解析（除非用户自定义了 API）
   if (type === 'twitter' && !dedicatedUrl) {
     debugLog('INFO', 'twitter 走原生 syndication 解析:', url)
-    const parsed = await parseTwitter(url, http)
+    const twCreds = (config.twitterAuthToken && config.twitterCt0)
+      ? { authToken: String(config.twitterAuthToken), ct0: String(config.twitterCt0) }
+      : undefined
+    const parsed = await parseTwitter(url, http, twCreds)
     urlCacheLocal.set(cacheKey, { data: parsed, expire: Date.now() + cacheTTL })
     return parsed
   }

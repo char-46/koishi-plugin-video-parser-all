@@ -85,3 +85,59 @@ describe('fetchApi — twitter 路由到原生解析', () => {
     expect(calls).toBe(1)
   })
 })
+
+describe('parseTwitter — 登录态 GraphQL 回退', () => {
+  const creds = { authToken: 'tok', ct0: 'ct0val' }
+  // 路由 mock：syndication 返回 tombstone，graphql 按 url 返回不同结果
+  function routeHttp(graphqlPayload: any, status = 200): any {
+    return {
+      get: async (url: string) => {
+        if (url.includes('syndication')) return { data: { __typename: 'TweetTombstone', tombstone: {} } }
+        return { status, data: graphqlPayload }
+      },
+    }
+  }
+  const gqlTweet = {
+    data: { tweetResult: { result: {
+      __typename: 'Tweet', rest_id: '2059244332285313260',
+      views: { count: '999' },
+      core: { user_results: { result: { rest_id: '9', legacy: { screen_name: 'lk1', name: 'L K', profile_image_url_https: 'https://pbs/a.jpg', followers_count: 88, description: 'bio' } } } },
+      legacy: {
+        full_text: 'login required tweet', created_at: 'Fri Jan 01 00:00:00 +0000 2021',
+        favorite_count: 5, retweet_count: 4, reply_count: 3, bookmark_count: 2,
+        entities: { media: [
+          { type: 'photo', media_url_https: 'https://pbs/p.jpg' },
+          { type: 'video', media_url_https: 'https://pbs/poster.jpg', video_info: { duration_millis: 5000, variants: [
+            { bitrate: 832000, content_type: 'video/mp4', url: 'https://video/832.mp4' },
+            { bitrate: 432000, content_type: 'video/mp4', url: 'https://video/432.mp4' },
+          ] } },
+        ] },
+      },
+    } } },
+  }
+
+  it('无 creds 且 tombstone → 抛需登录错误', async () => {
+    await expect(parseTwitter('https://x.com/u/status/2059244332285313260', routeHttp(gqlTweet))).rejects.toThrow(/不可访问|登录/)
+  })
+
+  it('有 creds + GraphQL 200 → 解析需登录推文', async () => {
+    const t = await parseTwitter('https://x.com/u/status/2059244332285313260', routeHttp(gqlTweet), creds)
+    expect(t.type).toBe('video')
+    expect(t.video).toBe('https://video/832.mp4')       // 取最高码率
+    expect(t.videos[0].url).toBe('https://video/832.mp4')
+    expect(t.images).toEqual(['https://pbs/p.jpg'])
+    expect(t.cover).toBe('https://pbs/poster.jpg')
+    expect(t.duration).toBe(5)
+    expect(t.author).toBe('L K')
+    expect(t.uid).toBe('lk1')
+    expect(t.like).toBe(5)
+    expect(t.share).toBe(4)
+    expect(t.play).toBe(999)
+    expect(t.publishTime).toBe(Date.parse('Fri Jan 01 00:00:00 +0000 2021'))
+  })
+
+  it('有 creds + GraphQL 403 → 抛 Cloudflare 指纹错误', async () => {
+    await expect(parseTwitter('https://x.com/u/status/2059244332285313260', routeHttp({}, 403), creds))
+      .rejects.toThrow(/Cloudflare|TLS 指纹/)
+  })
+})

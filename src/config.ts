@@ -237,6 +237,8 @@ export const Config = Schema.intersect([
       '  "music_url": "data.music.url"\n' +
       '}'
     ).description('全局字段映射 JSON'),
+    twitterAuthToken: Schema.string().default('').role('secret').description('X/Twitter 登录态 auth_token（仅解析需登录推文时用；受 Cloudflare 指纹限制，服务端可能 403）'),
+    twitterCt0: Schema.string().default('').role('secret').description('X/Twitter 登录态 ct0（与 auth_token 配对，同时作为 csrf token）'),
   }).description('API 与平台'),
 
   Schema.object({

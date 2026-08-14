@@ -36,12 +36,15 @@ interface CliArgs {
   api: string | undefined
   proxy: string | undefined
   dedicatedFirst: boolean
+  twitterAuthToken: string | undefined
+  twitterCt0: string | undefined
 }
 
 function parseArgs(argv: string[]): CliArgs {
   const args: CliArgs = {
     url: '', download: false, output: '.', json: false, info: false, debug: false,
     api: undefined, proxy: undefined, dedicatedFirst: false,
+    twitterAuthToken: undefined, twitterCt0: undefined,
   }
   const positional: string[] = []
   for (let i = 0; i < argv.length; i++) {
@@ -55,6 +58,8 @@ function parseArgs(argv: string[]): CliArgs {
       case '--api': args.api = argv[++i]; break
       case '--proxy': args.proxy = argv[++i]; break
       case '--dedicated-first': args.dedicatedFirst = true; break
+      case '--twitter-auth-token': args.twitterAuthToken = argv[++i]; break
+      case '--twitter-ct0': args.twitterCt0 = argv[++i]; break
       case '-h': case '--help': printHelp(); process.exit(0)
       default:
         if (a.startsWith('-')) { console.error(`未知选项: ${a}`); process.exit(1) }
@@ -80,13 +85,15 @@ koishi-plugin-video-parser-all CLI — 像 you-get 一样解析/下载视频
   --api <url>            覆盖默认主解析 API
   --proxy <url>          HTTP 代理，如 http://127.0.0.1:7890
   --dedicated-first      优先使用平台专属 API
+  --twitter-auth-token <t>  X 登录态 auth_token（解析需登录推文，受 CF 指纹限制）
+  --twitter-ct0 <t>         X 登录态 ct0（与 auth_token 配对，同时用作 csrf token）
   --debug                开启调试日志
   -h, --help             显示帮助
 
 示例:
   video-parser https://www.bilibili.com/video/BV1xx411c7mD
   video-parser https://v.douyin.com/xxxx/ -d -o ./downloads
-  video-parser https://xhslink.com/xxxx --json
+  video-parser https://x.com/.../status/123 --twitter-auth-token A --twitter-ct0 B
 `.trim())
 }
 
@@ -232,6 +239,8 @@ async function main(): Promise<void> {
     platformDedicatedFirst: args.dedicatedFirst ? { [type]: true } : {},
     proxy: args.proxy ? parseProxy(args.proxy) : { enabled: false },
     debug: args.debug,
+    twitterAuthToken: args.twitterAuthToken,
+    twitterCt0: args.twitterCt0,
   })
 
   const ctx = {} as Context
