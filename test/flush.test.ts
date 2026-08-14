@@ -1,0 +1,91 @@
+import { describe, it, expect } from 'vitest'
+import { flush } from '../src/sender/flush'
+import { mockSession, mockHttp, makeRuntime, sentTexts } from './helpers'
+
+/**
+ * 注意：parseApiResponse 的 fallback 读取 data.url 作为视频、data.cover 作为封面、
+ * data.title 作为标题。测试 payload 须用这些键（或通过 fieldMapping 映射）。
+ */
+
+describe('flush 端到端（mock session + mock http，无需 Koishi bot）', () => {
+  it('视频：发送文字 + 封面（普通逐条模式）', async () => {
+    const rt = makeRuntime({
+      http: mockHttp(() => ({ code: 200, data: { title: '视频标题', url: 'https://x/v.mp4', cover: 'https://x/c.jpg' } })),
+    })
+    const session = mockSession()
+    await flush(rt, session as any, [{ type: 'douyin', url: 'https://v.douyin.com/A/', id: 'A' }])
+    expect(sentTexts(session._sent).some(t => t.includes('标题：'))).toBe(true)   // 文字消息
+    expect(session._sent.some(c => c?.type === 'img')).toBe(true)                 // 封面图片元素
+  })
+
+  it('主 API 失败 → 回退到备用/专属 API', async () => {
+    let calls = 0
+    const rt = makeRuntime({
+      http: mockHttp((endpoint) => {
+        calls++
+        if (endpoint.includes('short_videos')) return { code: 500, msg: 'err' } // 主 API 故障
+        return { code: 200, data: { title: '回退视频', url: 'https://x/v.mp4' } } // 备用/专属成功
+      }),
+    })
+    const session = mockSession()
+    await flush(rt, session as any, [{ type: 'douyin', url: 'https://v.douyin.com/B/', id: 'B' }])
+    expect(calls).toBeGreaterThan(1)                                              // 调用了多个 API
+    expect(sentTexts(session._sent).some(t => t.includes('标题：'))).toBe(true)
+  })
+
+  it('图集：逐张发送图片', async () => {
+    const rt = makeRuntime({
+      http: mockHttp({ code: 200, data: { images: ['https://x/1.jpg', 'https://x/2.jpg'] } }),
+    })
+    const session = mockSession()
+    await flush(rt, session as any, [{ type: 'xiaohongshu', url: 'https://xhslink.com/X', id: 'X' }])
+    expect(session._sent.filter(c => c?.type === 'img').length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('直播：发送"直播进行中"提示，不发送视频', async () => {
+    const rt = makeRuntime({
+      http: mockHttp({ code: 200, data: { type: 'live', live: true, url: 'https://x/live.mp4' } }),
+    })
+    const session = mockSession()
+    await flush(rt, session as any, [{ type: 'huya', url: 'https://huya.com/video/x', id: 'x' }])
+    expect(sentTexts(session._sent).some(t => t.includes('直播进行中'))).toBe(true)
+    expect(session._sent.some(c => c?.type === 'video')).toBe(false)
+  })
+
+  it('合并转发模式：构建 forward 消息含 video 节点', async () => {
+    const rt = makeRuntime({
+      config: { enableForward: true, showImageText: true, globalFieldMapping: '{}' },
+      http: mockHttp({ code: 200, data: { title: '转发视频', url: 'https://x/v.mp4' } }),
+    })
+    const session = mockSession({ platform: 'onebot' })
+    await flush(rt, session as any, [{ type: 'douyin', url: 'https://v.douyin.com/F/', id: 'F' }])
+    const fwd = session._sent.find(c => c?.type === 'message' && c.attrs?.forward === true)
+    expect(fwd).toBeTruthy()
+    const childTypes = (fwd.children || []).map((n: any) => n?.type)
+    expect(childTypes).toContain('node')
+  })
+
+  it('URL 去重：第二次相同链接发送去重提示', async () => {
+    const rt = makeRuntime({
+      config: { enableDeduplication: true, deduplicationInterval: 180, globalFieldMapping: '{}' },
+      http: mockHttp({ code: 200, data: { title: '去重视频', url: 'https://x/v.mp4' } }),
+    })
+    const url = 'https://v.douyin.com/D/'
+    const s1 = mockSession()
+    await flush(rt, s1 as any, [{ type: 'douyin', url, id: 'D' }])
+    expect(s1._sent.length).toBeGreaterThan(0) // 首次正常发送
+    const s2 = mockSession()
+    await flush(rt, s2 as any, [{ type: 'douyin', url, id: 'D' }])
+    expect(sentTexts(s2._sent).some(t => t.includes('已解析过'))).toBe(true) // 第二次命中去重
+  })
+
+  it('平台被禁用：不发送任何内容', async () => {
+    const rt = makeRuntime({
+      config: { platformEnabled: { douyin: false }, globalFieldMapping: '{}' },
+      http: mockHttp({ code: 200, data: { url: 'https://x/v.mp4' } }),
+    })
+    const session = mockSession()
+    await flush(rt, session as any, [{ type: 'douyin', url: 'https://v.douyin.com/E/', id: 'E' }])
+    expect(session._sent).toHaveLength(0)
+  })
+})

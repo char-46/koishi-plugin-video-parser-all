@@ -1,0 +1,93 @@
+import type { Context } from 'koishi'
+import { createRuntime, ParserRuntime } from '../src/runtime'
+
+/** 构造一份足够驱动 flush/fetchApi/getPlatformConfig 的默认配置 */
+export function makeConfig(overrides: Record<string, any> = {}): any {
+  return {
+    enable: true,
+    debug: false,
+    deduplicationInterval: 180,
+    cacheTTL: 600,
+    maxConcurrent: 3,
+    platformEnabled: {},
+    enableDeduplication: true,
+    platformDedicatedFirst: {},
+    globalFieldMapping: '{}',
+    customApis: [],
+    customPlatforms: [],
+    primaryApiUrl: 'https://api.bugpk.com/api/short_videos',
+    backupApiUrl: 'https://api.bugpk.com/api/svparse',
+    retryTimes: 1,
+    retryInterval: 1,
+    timeout: 5000,
+    userAgent: 'test-ua',
+    customHeaders: [],
+    maxDescLength: 200,
+    unifiedMessageFormat: '标题：${标题}\n作者：${作者}\n点赞：${点赞数}',
+    showImageText: true,
+    enableForward: false,
+    showAuthorAvatar: false,
+    showCoverImage: true,
+    showCoverText: false,
+    showMusicCover: false,
+    showMusicVoice: false,
+    sendLiveMessage: true,
+    showCoverFile: true,
+    showImageFileNew: true,
+    showAuthorAvatarFile: true,
+    showMusicVoiceFile: true,
+    showAuthorAvatarText: false,
+    ignoreSendError: true,
+    videoSendTimeout: 0,
+    proxy: { enabled: false },
+    ...overrides,
+  }
+}
+
+/** 模拟 Koishi session：记录所有 send 调用，便于断言 */
+export function mockSession(opts: { content?: string; elements?: any[]; platform?: string; subtype?: string } = {}) {
+  const sent: any[] = []
+  return {
+    platform: opts.platform ?? 'onebot',
+    selfId: 'bot1',
+    userId: 'user1',
+    messageId: 'msg1',
+    subtype: opts.subtype ?? 'private',
+    content: opts.content ?? '',
+    elements: opts.elements,
+    async send(content: any) {
+      sent.push(content)
+      return []
+    },
+    _sent: sent,
+  }
+}
+
+/** 构造一个 http.get 返回固定 payload 的 mock axios 实例 */
+export function mockHttp(payloadByMatcher: ((url: string) => any) | any) {
+  return {
+    get: async (url: string) => {
+      const payload = typeof payloadByMatcher === 'function' ? payloadByMatcher(url) : payloadByMatcher
+      return { data: payload }
+    },
+  }
+}
+
+/** 构造 ParserRuntime，并用 mock http 替换真实 axios 实例 */
+export function makeRuntime(opts: { config?: any; http?: any } = {}): ParserRuntime {
+  const ctx = {} as Context
+  const config = makeConfig(opts.config)
+  const rt = createRuntime(ctx, config)
+  if (opts.http) (rt as any).http = opts.http
+  return rt
+}
+
+/** 从收集到的发送内容中提取文本（h 元素或纯文本） */
+export function sentTexts(sent: any[]): string[] {
+  return sent.map(c => {
+    if (c == null) return ''
+    if (typeof c === 'string') return c
+    if (c.type === 'text') return c.attrs?.content ?? ''
+    return c.type ? `<${c.type}>` : JSON.stringify(c)
+  })
+}
