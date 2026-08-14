@@ -22,7 +22,7 @@
 | 12 | `huya` | [虎牙](huya.md) | 直播回放/视频 | ✓ | ✗ | ✓ | ✓ | ✓ | |
 | 13 | `haokan` | [好看视频](haokan.md) | 短视频 | ✗ | ✗ | ✓ | ✓ | ✓ | 仅主 API |
 | 14 | `meipai` | [美拍](meipai.md) | 短视频 | ✗ | ✗ | ✓ | ✓ | ✓ | 仅主 API |
-| 15 | `twitter` | [Twitter/X](twitter.md) | 视频/图文 | ✗ | ✗ | ✓ | ✓ | ✓ | 仅主 API |
+| 15 | `twitter` | [Twitter/X](twitter.md) | 视频/图文 | 原生 | ✗ | ✓ | ✓ | ✓ | 原生 syndication 解析（不走 bugpk） |
 | 16 | `instagram` | [Instagram](instagram.md) | 图文/Reels | ✗ | ✓ | ✓ | ✓ | ✓ | 备用允许（无专属） |
 | 17 | `doubao` | [豆包（视频）](doubao.md) | 视频 | ✓ | ✗ | ✓ | ✓ | ✓ | |
 | 18 | `doubao_image` | [豆包（图集）](doubao_image.md) | 图文 | ✓ | ✗ | ✓ | ✓ | ✓ | |

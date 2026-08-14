@@ -6,6 +6,7 @@ import { delay, getErrorMessage } from '../utils/common'
 import { generateFormattedText } from '../utils/format'
 import { parseApiResponse } from './parser'
 import { getPlatformConfig, buildAuthHeaders } from '../platforms/custom'
+import { parseTwitter } from '../platforms/twitter'
 
 export async function fetchApi(rt: ParserRuntime, url: string, type: string, fieldMapping?: Record<string, string>, platformConf?: any): Promise<ParsedData> {
   const { config, http, urlCacheLocal, proxyConfig, cacheTTL } = rt
@@ -14,6 +15,15 @@ export async function fetchApi(rt: ParserRuntime, url: string, type: string, fie
   if (cached && cached.expire > Date.now()) return cached.data
 
   const { apiUrl: dedicatedUrl, dedicatedFirst, apiKey, authHeaderType, customHeaderName, customProxy } = platformConf || getPlatformConfig(rt, type)
+
+  // X / Twitter：bugpk 统一 API 不支持，走原生 syndication 解析（除非用户自定义了 API）
+  if (type === 'twitter' && !dedicatedUrl) {
+    debugLog('INFO', 'twitter 走原生 syndication 解析:', url)
+    const parsed = await parseTwitter(url, http)
+    urlCacheLocal.set(cacheKey, { data: parsed, expire: Date.now() + cacheTTL })
+    return parsed
+  }
+
   const primaryApi = config.primaryApiUrl || 'https://api.bugpk.com/api/short_videos'
   const backupApi = config.backupApiUrl || 'https://api.bugpk.com/api/svparse'
   const backupAllowed = new Set(['douyin', 'xiaohongshu', 'instagram', 'jimeng']).has(type)
