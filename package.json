@@ -4,6 +4,9 @@
   "version": "1.5.8",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
+  "bin": {
+    "video-parser": "lib/cli.js"
+  },
   "files": [
     "lib"
   ],
@@ -13,7 +16,9 @@
     "dev": "tsc -w",
     "clean": "rimraf lib",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "cli": "tsx src/cli.ts",
+    "cli:lib": "node lib/cli.js"
   },
   "keywords": [
     "chatbot",
@@ -90,6 +95,7 @@
   ],
   "devDependencies": {
     "rimraf": "^5.0.5",
+    "tsx": "^4.23.12",
     "typescript": "^5.3.3",
     "vitest": "^4.1.10"
   },
