@@ -1,72 +1,15 @@
-import { Context, h, Logger } from 'koishi'
+import { Context, h } from 'koishi'
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios'
 import { name, Config } from './config'
 import type { VideoQuality, ParsedData, LinkMatch, ApiItem, CustomPlatformConfig } from './types'
+import { SimpleLRUCache } from './utils/cache'
+import { ConcurrencyLimiter } from './utils/concurrency'
+import { logger, debugLog, setDebugEnabled } from './utils/logger'
+import { delay, getErrorMessage, parseCount, pickBestQuality, contentFingerprint } from './utils/common'
+import { getNestedValue, parseFieldMapping } from './utils/field-mapping'
+import { generateFormattedText } from './utils/format'
 
 export { name, Config }
-
-class SimpleLRUCache<V> {
-  private map = new Map<string, { value: V; expireAt: number }>()
-  constructor(private max: number, private ttlMs: number) {}
-  get(key: string): V | undefined {
-    const entry = this.map.get(key)
-    if (!entry) return undefined
-    if (Date.now() > entry.expireAt) {
-      this.map.delete(key)
-      return undefined
-    }
-    return entry.value
-  }
-  set(key: string, value: V): void {
-    this.map.delete(key)
-    while (this.map.size >= this.max) {
-      const k = this.map.keys().next().value
-      if (k === undefined) break
-      this.map.delete(k)
-    }
-    this.map.set(key, { value, expireAt: Date.now() + this.ttlMs })
-  }
-  clear(): void {
-    this.map.clear()
-  }
-}
-
-class ConcurrencyLimiter {
-  private running = 0
-  private queue: (() => void)[] = []
-  constructor(private max: number) {}
-  async acquire(): Promise<void> {
-    if (this.running < this.max) {
-      this.running++
-      return
-    }
-    return new Promise(resolve => {
-      this.queue.push(() => {
-        this.running++
-        resolve()
-      })
-    })
-  }
-  release(): void {
-    this.running--
-    const next = this.queue.shift()
-    if (next) next()
-  }
-}
-
-const logger = new Logger(name)
-let debugEnabled = false
-function debugLog(level: string, ...args: any[]) {
-  if (!debugEnabled) return
-  const safe = args.map(a => {
-    try {
-      return typeof a === 'object' ? JSON.stringify(a) : String(a)
-    } catch {
-      return '[unserializable]'
-    }
-  })
-  logger.info(`[${new Date().toISOString()}] [${level}] ${safe.join(' ')}`)
-}
 
 const BUILTIN_LINK_RULES: { pattern: RegExp; type: string }[] = [
   { pattern: /https?:\/\/(?:www\.)?bilibili\.com\/video\/([ab]v[0-9a-zA-Z_-]+)(?:\?[^\s'"“”‘’]*)?/gi, type: 'bilibili' },
@@ -217,62 +160,6 @@ function extractAllUrlsFromMessage(session: any, customRules: { pattern: RegExp;
   return cleanResult
 }
 
-function formatDuration(seconds: number): string {
-  if (!seconds || seconds <= 0) return ''
-  const h = Math.floor(seconds / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  const s = Math.floor(seconds % 60)
-  if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
-  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
-}
-
-function formatPublishTime(ms: number): string {
-  if (!ms) return ''
-  const d = new Date(ms)
-  const y = d.getFullYear()
-  const mo = (d.getMonth() + 1).toString().padStart(2, '0')
-  const day = d.getDate().toString().padStart(2, '0')
-  const H = d.getHours().toString().padStart(2, '0')
-  const i = d.getMinutes().toString().padStart(2, '0')
-  return `${y}年${mo}月${day}日 ${H}:${i}`
-}
-
-function pickBestQuality(videoBackup: any[]): VideoQuality[] {
-  if (!Array.isArray(videoBackup)) return []
-  return videoBackup.filter(v => v && v.url).map(v => ({
-    quality: v.quality || v.label || 'unknown',
-    url: v.url,
-    bit_rate: Number(v.bit_rate || 0)
-  })).sort((a, b) => b.bit_rate - a.bit_rate)
-}
-
-function getNestedValue(obj: any, path: string): any {
-  if (!path) return obj
-  const keys = path.split('.')
-  let current = obj
-  for (const key of keys) {
-    if (current === null || current === undefined) return undefined
-    current = current[key]
-  }
-  return current
-}
-
-function parseCount(val: any): number {
-  if (val === undefined || val === null) return 0
-  if (typeof val === 'number') return val
-  const str = String(val).trim()
-  if (str.includes('万')) {
-    const num = parseFloat(str)
-    return isNaN(num) ? 0 : Math.round(num * 10000)
-  }
-  if (str.includes('亿')) {
-    const num = parseFloat(str)
-    return isNaN(num) ? 0 : Math.round(num * 100000000)
-  }
-  const num = parseInt(str, 10)
-  return isNaN(num) ? 0 : num
-}
-
 function parseApiResponse(raw: any, maxDescLen: number, fieldMapping?: Record<string, string>): ParsedData {
   debugLog('DEBUG', 'API raw response', raw)
   const data = raw?.data || {}
@@ -408,57 +295,6 @@ function parseApiResponse(raw: any, maxDescLen: number, fieldMapping?: Record<st
   return { type, title, desc, author, uid, avatar, cover, video, videos, images, live_photo, music, like, comment, collect, share, play, duration, publishTime, author_followers, author_signature, admire }
 }
 
-const formatVarRegex = /\$\{([^}]+)\}/g
-function generateFormattedText(p: ParsedData, format: string, index?: number, total?: number): string {
-  const imageCount = p.images.length || p.live_photo.length
-  const vars: Record<string, string> = {
-    '标题': p.title,
-    '作者': p.author,
-    '简介': p.desc,
-    '视频时长': p.duration > 0 ? formatDuration(p.duration) : '',
-    '点赞数': String(p.like),
-    '收藏数': String(p.collect),
-    '转发数': String(p.share),
-    '播放数': String(p.play),
-    '评论数': String(p.comment),
-    '发布时间': p.publishTime ? formatPublishTime(p.publishTime) : '',
-    '图片数量': String(imageCount),
-    '作者ID': p.uid,
-    '音乐标题': p.music.title || '',
-    '音乐作者': p.music.author || '',
-  }
-
-  const lines = format.split('\n')
-  const resultLines: string[] = []
-  for (const line of lines) {
-    const varMatches = line.match(formatVarRegex)
-    if (varMatches && varMatches.length > 0) {
-      let allEmptyOrZero = true
-      for (const match of varMatches) {
-        const varName = match.slice(2, -1)
-        const val = vars[varName]
-        if (val && val !== '0') {
-          allEmptyOrZero = false
-          break
-        }
-      }
-      if (allEmptyOrZero) continue
-    }
-    let newLine = line
-    for (const [key, val] of Object.entries(vars)) {
-      newLine = newLine.replace(new RegExp(`\\$\\{${key}\\}`, 'g'), val)
-    }
-    resultLines.push(newLine)
-  }
-  let text = resultLines.join('\n').trim()
-  if (index !== undefined && total !== undefined && total > 1) {
-    text = `【${index}/${total}】\n${text}`
-  }
-  return text
-}
-
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
-
 function buildForwardNode(session: any, content: any, botName: string) {
   let messageContent: any[]
   if (Array.isArray(content)) messageContent = content
@@ -467,36 +303,14 @@ function buildForwardNode(session: any, content: any, botName: string) {
   return h('node', { user: { nickname: botName.substring(0, 15), user_id: session.selfId } }, messageContent)
 }
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message
-  if (error && typeof error === 'object' && 'message' in error) return String((error as Record<string, unknown>).message)
-  return String(error)
-}
-
-function parseFieldMapping(mappingStr: string): Record<string, string> | undefined {
-  if (!mappingStr || mappingStr.trim() === '{}' || mappingStr.trim() === '') return undefined
-  try {
-    const obj = JSON.parse(mappingStr)
-    if (typeof obj === 'object' && !Array.isArray(obj)) return obj
-    return undefined
-  } catch {
-    return undefined
-  }
-}
-
 export function apply(ctx: Context, config: any) {
-  debugEnabled = config.debug || false
+  setDebugEnabled(config.debug || false)
   debugLog('INFO', 'plugin start')
 
   const dedupCache = new SimpleLRUCache<number>(1000, config.deduplicationInterval * 1000)
   const cacheTTL = (config.cacheTTL || 600) * 1000
   const urlCacheLocal = new SimpleLRUCache<{ data: ParsedData; expire: number }>(500, cacheTTL)
   const contentDedupCache = new SimpleLRUCache<number>(1000, config.deduplicationInterval * 1000)
-
-  function contentFingerprint(p: ParsedData): string {
-    const imgSig = p.images?.length ? p.images.slice(0, 3).join('|') : (p.live_photo?.slice(0, 3).map(lp => lp.image).join('|') || '')
-    return [p.type, p.title, p.author, p.uid, p.video, imgSig].map(v => String(v ?? '')).join('::')
-  }
 
   function getText(key: string): string {
     const defaults: Record<string, string> = {
