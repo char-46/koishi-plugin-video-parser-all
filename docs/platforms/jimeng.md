@@ -12,11 +12,11 @@
 | 专属 API | `https://api.bugpk.com/api/jimengai` |
 | 备用 API | **允许**（在 `backupAllowed` 白名单） |
 | 字段映射 | 全局 `globalFieldMapping`（无专属） |
-| `platformEnabled` 默认 | ⚠️ **缺失**（不在开关表，`?? true` 兜底为启用） |
-| `platformDedicatedFirst` 默认 | ⚠️ **缺失**（不在开关表，`?? false` 兜底为 false） |
-| `customApis` 可配置 | ⚠️ 缺失（不在 `customApis.platform` 枚举） |
+| `platformEnabled` 默认 | `true` |
+| `platformDedicatedFirst` 默认 | `false` |
+| `customApis` 可配置 | 是 |
 
-> ⚠️ 数据不一致：`jimeng` 在链接规则、专属 API、备用白名单中均存在，但缺失于 `platformEnabled` / `platformDedicatedFirst` / `customApis` 三处。用户无法通过 UI 单独开关或配置自定义 API。**拆分阶段将修正**。
+> 历史版本中 `jimeng` 曾缺失于 `platformEnabled` / `platformDedicatedFirst` / `customApis` 三处（链接规则、专属 API、备用白名单中却存在），用户无法通过 UI 单独开关或配置自定义 API。**已修正**：现已在开关表与枚举中补齐。
 
 ## 链接匹配规则
 

@@ -12,41 +12,45 @@
 | 专属 API | `https://api.bugpk.com/api/toutiao` |
 | 备用 API | 不允许 |
 | 字段映射 | 全局 `globalFieldMapping`（无专属） |
-| `platformEnabled` 默认 | ⚠️ **缺失** |
-| `platformDedicatedFirst` 默认 | ⚠️ **缺失** |
-| `customApis` 可配置 | ⚠️ 缺失 |
-| **链接匹配规则** | ⚠️ **无**（`BUILTIN_LINK_RULES` 中不存在 `toutiao`） |
+| `platformEnabled` 默认 | `true` |
+| `platformDedicatedFirst` 默认 | `false` |
+| `customApis` 可配置 | 是 |
+| **链接匹配规则** | 已补全（`toutiao.com/video/`） |
 
-> ⚠️ **重大不一致**：`toutiao` 仅存在于 `defaultDedicatedApis`（专属 API 表，`index.ts:840`），但 `BUILTIN_LINK_RULES` 中**没有任何匹配到 `toutiao` 的正则规则**。因此消息匹配阶段（`linkTypeParser`）永远不会产生 `type='toutiao'` 的 `LinkMatch`，该专属 API **实际上是不可达的死数据**。
->
-> 此外它也缺失于 `platformEnabled` / `platformDedicatedFirst` / `customApis` 三处。**拆分阶段将修正**（补充链接规则或移除死数据，以统一注册表为准）。
+> 历史版本中 `toutiao` 仅存在于 `defaultDedicatedApis`（专属 API 表），既无链接规则也缺失于三处开关/枚举，是**不可达的死数据**。**已修正**：补全了 `toutiao.com/video/` 链接规则，并在 `platformEnabled` / `platformDedicatedFirst` / `customApis` 中补齐，现可被正常识别与解析。
 
 ## 链接匹配规则
 
-**无**。`BUILTIN_LINK_RULES` 中找不到 `toutiao`（对比其他平台均有 1~5 条正则）。
+`BUILTIN_LINK_RULES` 中归属 `toutiao`：
 
-## 解析流程时序图（理论可达路径 / 当前实际不可达）
+```js
+/https?:\/\/(?:www\.|m\.)?toutiao\.com\/video\/\d+/gi
+```
 
-下图展示「假如」存在链接规则时的流程；当前由于无规则，`flush` 中不会出现 `type='toutiao'`。
+## 解析流程时序图
+
+`dedicatedFirst=false`（默认），顺序：主 API → 专属 API（无备用）。
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant Msg as 消息匹配
     participant FL as flush
     participant GPC as getPlatformConfig
     participant FA as fetchApi
-    Note over Msg: ⚠️ 无 toutiao 链接规则<br/>linkTypeParser 不会产出<br/>type='toutiao' → flush 永不调用
-    Note over FL,GPC: 因此下方流程当前为死代码
-    FL->>GPC: getPlatformConfig('toutiao')（假设被调用）
-    GPC-->>FL: 专属=toutiao API, dedicatedFirst=false
+    participant HTTP as http(Axios)
+    participant PA as parseApiResponse
+    FL->>GPC: getPlatformConfig('toutiao')
+    GPC-->>FL: dedicatedFirst=false<br/>专属=toutiao API
     FL->>FA: fetchApi(url)
     Note over FA: apiList = [主API, 专属toutiao]
-    FA->>FA: ...（理论流程同其它专属平台）
+    FA->>HTTP: GET 主API ?url=
+    alt 主API 成功
+        HTTP-->>FA: res.data
+    else 主API 失败
+        FA->>HTTP: GET 专属 toutiao ?url=
+        HTTP-->>FA: res.data
+    end
+    FA->>PA: parseApiResponse(globalFieldMapping)
+    PA-->>FL: ParsedData type=video
+    Note over FL: 发送视频 + 封面 + 文字
 ```
-
-## 修正建议（拆分阶段）
-
-建立统一平台注册表时二选一：
-- **方案 A（补全）**：为 `toutiao` 添加链接规则（如 `toutiao.com/video/` 等），并在开关表中补齐，使其真正可用
-- **方案 B（移除）**：从 `defaultDedicatedApis` 删除 `toutiao`，消除死数据

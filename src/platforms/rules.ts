@@ -58,4 +58,5 @@ export const BUILTIN_LINK_RULES: { pattern: RegExp; type: string }[] = [
   { pattern: /https?:\/\/(?:www\.)?pipixia\.com\/[0-9a-zA-Z_\/-]+/gi, type: 'pipixia' },
   { pattern: /https?:\/\/share\.xiaochuankeji\.cn\/hybrid\/share\/post\?pid=\d+/gi, type: 'zuiyou' },
   { pattern: /https?:\/\/(?:h5|www)\.izuiyou\.com\/[0-9a-zA-Z_\/-]+/gi, type: 'zuiyou' },
+  { pattern: /https?:\/\/(?:www\.|m\.)?toutiao\.com\/video\/\d+/gi, type: 'toutiao' },
 ]

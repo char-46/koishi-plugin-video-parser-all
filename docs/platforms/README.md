@@ -25,18 +25,18 @@
 | 15 | `twitter` | [Twitter/X](twitter.md) | 视频/图文 | ✗ | ✗ | ✓ | ✓ | ✓ | 仅主 API |
 | 16 | `instagram` | [Instagram](instagram.md) | 图文/Reels | ✗ | ✓ | ✓ | ✓ | ✓ | 备用允许（无专属） |
 | 17 | `doubao` | [豆包（视频）](doubao.md) | 视频 | ✓ | ✗ | ✓ | ✓ | ✓ | |
-| 18 | `doubao_image` | [豆包（图集）](doubao_image.md) | 图文 | ✓ | ✗ | ✓ | ✓ | ✗ | customApis 枚举缺失 |
-| 19 | `jimeng` | [即梦](jimeng.md) | AI视频/AI图片 | ✓ | ✓ | ⚠️ | ⚠️ | ⚠️ | 开关/枚举缺失（待修正） |
+| 18 | `doubao_image` | [豆包（图集）](doubao_image.md) | 图文 | ✓ | ✗ | ✓ | ✓ | ✓ | |
+| 19 | `jimeng` | [即梦](jimeng.md) | AI视频/AI图片 | ✓ | ✓ | ✓ | ✓ | ✓ | 备用允许 |
 | 20 | `oasis` | [绿洲](oasis.md) | 视频/图文 | ✗ | ✗ | ✓ | ✓ | ✓ | 仅主 API |
 | 21 | `wechat_channel` | [视频号](wechat_channel.md) | 短视频 | ✓ | ✗ | ✓ | ✓ | ✓ | |
-| 22 | `lishi` | [梨视频](lishi.md) | 短视频 | ✗ | ✗ | ✓ | ✓ | ✗ | customApis 枚举缺失 |
-| 23 | `quanmin` | [全民直播](quanmin.md) | 直播 | ✗ | ✗ | ✓ | ✓ | ✗ | customApis 枚举缺失 |
-| 24 | `pipigx` | [皮皮搞笑](pipigx.md) | 短视频 | ✓ | ✗ | ✓ | ✓ | ✗ | customApis 枚举缺失 |
-| 25 | `pipixia` | [皮皮虾](pipixia.md) | 短视频 | ✓ | ✗ | ✓ | ✓ | ✗ | customApis 枚举缺失 |
-| 26 | `zuiyou` | [最右](zuiyou.md) | 短视频 | ✓ | ✗ | ✓ | ✓ | ✗ | customApis 枚举缺失 |
-| 27 | `toutiao` | [今日头条](toutiao.md) | 视频 | ✓ | ✗ | ⚠️ | ⚠️ | ⚠️ | **无链接规则，永不触发**（待修正） |
+| 22 | `lishi` | [梨视频](lishi.md) | 短视频 | ✗ | ✗ | ✓ | ✓ | ✓ | 仅主 API |
+| 23 | `quanmin` | [全民直播](quanmin.md) | 直播 | ✗ | ✗ | ✓ | ✓ | ✓ | 仅主 API |
+| 24 | `pipigx` | [皮皮搞笑](pipigx.md) | 短视频 | ✓ | ✗ | ✓ | ✓ | ✓ | |
+| 25 | `pipixia` | [皮皮虾](pipixia.md) | 短视频 | ✓ | ✗ | ✓ | ✓ | ✓ | |
+| 26 | `zuiyou` | [最右](zuiyou.md) | 短视频 | ✓ | ✗ | ✓ | ✓ | ✓ | |
+| 27 | `toutiao` | [今日头条](toutiao.md) | 视频 | ✓ | ✗ | ✓ | ✓ | ✓ | 已补全链接规则 |
 
-图例：✓ 有/默认开启｜✗ 无｜⚠️ 数据缺失（见下方说明）
+图例：✓ 有/默认开启｜✗ 无
 
 ## 字段说明
 
@@ -71,23 +71,25 @@ flowchart LR
 
 详见 [通用类图 - parseApiResponse](../diagrams/02-class-general.md)。
 
-## 已知不一致（拆分阶段将修正）
+## 平台数据一致性（已修正）
+
+历史版本中平台信息分散在 6 处（链接规则、专属 API、启用开关、专属优先开关、customApis 枚举、备用白名单），曾存在不一致。拆分阶段已统一修正，现 27 个平台在所有表中均已对齐：
 
 ```mermaid
 flowchart TB
-    subgraph P["27 平台"]
-        J["jimeng<br/>链接规则 ✓ / 专属 API ✓ / 备用 ✓<br/>但 enabled/dedicatedFirst/customApis 缺失"]
-        T["toutiao<br/>仅专属 API ✓<br/>无链接规则 → 永不触发<br/>enabled/dedicatedFirst/customApis 缺失"]
-        D["doubao_image / lishi / quanmin<br/>pipigx / pipixia / zuiyou<br/>customApis 枚举缺失（UI 无法选择）"]
+    subgraph P["27 平台 — 已全部对齐"]
+        J["jimeng: 已补 enabled/dedicatedFirst/customApis<br/>（链接规则、专属 API、备用原本就有）"]
+        T["toutiao: 已补链接规则 (toutiao.com/video/)<br/>+ enabled/dedicatedFirst/customApis"]
+        D["doubao_image / lishi / quanmin<br/>pipigx / pipixia / zuiyou<br/>已补 customApis 枚举"]
     end
-    Fix["拆分阶段修正<br/>建立统一平台注册表"]
+    Fix["修正提交 (refactor 分支)"]
     J --> Fix
     T --> Fix
     D --> Fix
-    style J fill:#fecaca
-    style T fill:#fecaca
-    style D fill:#fed7aa
-    style Fix fill:#bbf7d0
+    style J fill:#bbf7d0
+    style T fill:#bbf7d0
+    style D fill:#bbf7d0
+    style Fix fill:#dbeafe
 ```
 
 各平台数据卡：

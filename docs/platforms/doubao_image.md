@@ -14,7 +14,7 @@
 | 字段映射 | 全局 `globalFieldMapping`（无专属） |
 | `platformEnabled` 默认 | `true` |
 | `platformDedicatedFirst` 默认 | `false` |
-| `customApis` 可配置 | ⚠️ 缺失（不在 `customApis.platform` 枚举，UI 无法选择；运行时仍可被 `getPlatformConfig` 识别） |
+| `customApis` 可配置 | 是 |
 
 ## 链接匹配规则
 
