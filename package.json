@@ -99,6 +99,9 @@
     "typescript": "^5.3.3",
     "vitest": "^4.1.10"
   },
+  "optionalDependencies": {
+    "cycletls": "^2.0.5"
+  },
   "dependencies": {
     "axios": "^1.16.1"
   },

@@ -8,8 +8,8 @@
 |---|---|
 | 平台 ID | `twitter` |
 | 中文名 | Twitter / X |
-| 解析能力 | 视频 / 图文 |
-| 解析方式 | **原生 syndication API**（`platforms/twitter.ts`，无需登录即可解析公开推文） |
+| 解析能力 | 视频 / 图文（含需登录/NSFW 推文） |
+| 解析方式 | **原生 syndication API**（公开推文，无需登录）+ **GraphQL 鉴权回退**（需登录推文） |
 | bugpk 统一 API | ✗ 不支持（主 API 返回"无法识别平台"） |
 | 备用 API | 不允许 |
 | 字段映射 | 不适用（原生解析直接构造 `ParsedData`） |
@@ -17,11 +17,11 @@
 | `platformDedicatedFirst` 默认 | `false` |
 | `customApis` 可配置 | 是（若配置则覆盖原生解析，走自定义 API） |
 
-> ⚠️ **登录限制与 Cloudflare 指纹墙**：X 的 syndication API 仅返回**公开**推文（忽略 cookie）。对需登录的推文，插件提供 **GraphQL 鉴权回退**（`TweetResultByRestId`，仅用 `auth_token` + `ct0` 两个 cookie，最小化）。
+> **登录态解析（已解决 TLS 指纹墙）**：X 的 syndication API 仅返回公开推文；需登录/NSFW 推文走 **GraphQL 鉴权回退**（`TweetResultByRestId`，仅用 `auth_token` + `ct0` 两个 cookie，最小化）。
 >
-> 但 X 的 GraphQL 端点受 **Cloudflare TLS 指纹校验**保护：服务端 Node/axios 的 TLS 握手(JA3/JA4)与 Chrome 不同，会被 CF 直接 **403**（cookie 到不了应用层，实测 guest 流程打公开推文也 403）。因此该回退仅在 **TLS 指纹模拟环境**（`curl-impersonate` / Puppeteer / 浏览器 / 指纹代理）下生效。
+> X 的 GraphQL 端点受 Cloudflare TLS 指纹校验保护，普通 Node/axios 会被 403。插件用 **cycletls**（`src/utils/tls-client.ts`，基于 utls 的 Chrome 指纹模拟，`optionalDependency`）发起 GraphQL 请求，从而通过 CF。已实测解析 NSFW 推文成功。
 >
-> **配置**（可选）：插件 `twitterAuthToken` + `twitterCt0`；CLI `--twitter-auth-token` + `--twitter-ct0`。提供后，遇到 tombstone 会尝试 GraphQL；纯 Node 下会返回明确的 403 错误。
+> **配置**：插件 `twitterAuthToken` + `twitterCt0`；CLI `--twitter-auth-token` + `--twitter-ct0`。需先安装可选依赖 `cycletls`。
 
 ## 链接匹配规则
 
@@ -59,14 +59,17 @@ sequenceDiagram
     else tombstone（受限/需登录）
         SYN-->>PT: {tombstone, ...}
         opt 提供了 auth_token + ct0
-            PT->>GQL: GET x.com/i/api/graphql/.../TweetResultByRestId<br/>cookie: auth_token; ct0 + bearer + x-csrf
-            alt TLS 指纹通过（curl-impersonate/浏览器）
-                GQL-->>PT: {data.tweetResult.result}
-                PT->>PT: mapGraphql 构造 ParsedData
+            PT->>TLS: tlsGet（cycletls，Chrome 指纹模拟）
+            TLS->>GQL: GET x.com/i/api/graphql/.../TweetResultByRestId<br/>cookie: auth_token; ct0 + Bearer + x-csrf
+            alt 成功（cycletls 通过 CF）
+                GQL-->>TLS: {data.tweetResult.result}
+                TLS-->>PT: status 200
+                PT->>PT: mapGraphql（解包 TweetWithVisibilityResults）
                 PT-->>FA: 成功
-            else 纯 Node（TLS 指纹不符）
-                GQL-->>PT: 403 Cloudflare
-                PT-->>FA: throw "Cloudflare 指纹拦截"
+            else 未安装 cycletls / TLS 指纹不符
+                GQL-->>TLS: 403 Cloudflare
+                TLS-->>PT: status 403
+                PT-->>FA: throw "TLS 指纹校验未通过"
             end
         end
         opt 未提供 cookie

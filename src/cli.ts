@@ -10,6 +10,7 @@ import { getPlatformConfig } from './platforms/custom'
 import { parseUrl } from './engine/fetcher'
 import { generateFormattedText, formatDuration, formatPublishTime } from './utils/format'
 import { setDebugEnabled, debugLog } from './utils/logger'
+import { shutdownTlsClient } from './utils/tls-client'
 import type { Context } from 'koishi'
 import type { ParsedData } from './types'
 
@@ -246,34 +247,40 @@ async function main(): Promise<void> {
   const ctx = {} as Context
   const rt = createRuntime(ctx, config)
 
+  let exitCode = 0
   try {
     const conf = getPlatformConfig(rt, type)
     const result = await parseUrl(rt, url, type, conf.fieldMapping, conf)
     if (!result.success) {
       console.error('\n✗ 解析失败:', result.msg)
-      process.exit(1)
-    }
-    const parsed = result.data
-    debugLog('DEBUG', '解析结果', parsed)
-
-    if (args.json) {
-      console.log(JSON.stringify(parsed, null, 2))
+      exitCode = 1
     } else {
-      printInfo(parsed, type)
-      if (parsed.video || parsed.images.length || parsed.live_photo.length) {
-        process.stdout.write('\n--- 文字消息预览 (unifiedMessageFormat) ---\n')
-        console.log(generateFormattedText(parsed, config.unifiedMessageFormat) || '(空)')
-      }
-    }
+      const parsed = result.data
+      debugLog('DEBUG', '解析结果', parsed)
 
-    if (args.download) {
-      await downloadAll(parsed, type, resolve(args.output))
+      if (args.json) {
+        console.log(JSON.stringify(parsed, null, 2))
+      } else {
+        printInfo(parsed, type)
+        if (parsed.video || parsed.images.length || parsed.live_photo.length) {
+          process.stdout.write('\n--- 文字消息预览 (unifiedMessageFormat) ---\n')
+          console.log(generateFormattedText(parsed, config.unifiedMessageFormat) || '(空)')
+        }
+      }
+
+      if (args.download) {
+        await downloadAll(parsed, type, resolve(args.output))
+      }
     }
   } catch (e: any) {
     console.error('\n✗ 解析失败:', e?.message || e)
     if (args.debug && e?.stack) console.error(e.stack)
-    process.exit(1)
+    exitCode = 1
   }
+
+  // 关闭 TLS 指纹模拟子进程，避免进程悬挂
+  await shutdownTlsClient().catch(() => {})
+  process.exit(exitCode)
 }
 
 main()

@@ -1,5 +1,9 @@
 import type { AxiosInstance } from 'axios'
 import type { ParsedData, VideoQuality } from '../types'
+import { tlsGet } from '../utils/tls-client'
+
+/** GraphQL GET 器：可注入（生产用 tlsGet，测试用 mock） */
+export type GraphqlGetter = (url: string, opts: { headers?: Record<string, string>; cookies?: Record<string, string>; timeout?: number }) => Promise<{ status: number; data: any }>
 
 /**
  * X / Twitter 原生解析器。
@@ -94,7 +98,12 @@ function mapSyndication(tw: any): ParsedData {
 }
 
 /** 把 GraphQL TweetResultByRestId 响应映射为 ParsedData */
-function mapGraphql(result: any): ParsedData {
+function mapGraphql(rawResult: any): ParsedData {
+  // NSFW/受限推文会被 TweetWithVisibilityResults 包裹，真实推文在其 .tweet 下
+  let result = rawResult
+  if (result && result.__typename === 'TweetWithVisibilityResults' && result.tweet) {
+    result = result.tweet
+  }
   const legacy = result.legacy || {}
   const user = result.core?.user_results?.result
   const ulegacy = user?.legacy || {}
@@ -143,24 +152,22 @@ function mapGraphql(result: any): ParsedData {
 }
 
 /** 鉴权 GraphQL：仅用 auth_token + ct0，回退取登录受限推文 */
-async function fetchGraphqlTweet(http: AxiosInstance, id: string, creds: TwitterCreds): Promise<ParsedData> {
+async function fetchGraphqlTweet(id: string, creds: TwitterCreds, get: GraphqlGetter): Promise<ParsedData> {
   const variables = { tweetId: id, includePromotedContent: true, withBirdwatchNotes: true, withVoice: true, withCommunity: true }
-  const url = `https://x.com/i/api/graphql/${TWEET_RESULT_QUERY_ID}/TweetResultByRestId`
+  const url = `https://x.com/i/api/graphql/${TWEET_RESULT_QUERY_ID}/TweetResultByRestId` +
+    `?variables=${encodeURIComponent(JSON.stringify(variables))}&features=${encodeURIComponent(JSON.stringify(GRAPHQL_FEATURES))}`
   let res
   try {
-    res = await http.get(url, {
-      params: { variables: JSON.stringify(variables), features: JSON.stringify(GRAPHQL_FEATURES) },
-      timeout: 30000,
-      validateStatus: () => true,
+    res = await get(url, {
       headers: {
-        authorization: WEB_BEARER,
+        authorization: 'Bearer ' + WEB_BEARER,
         'x-csrf-token': creds.ct0,
         'x-twitter-auth-type': 'OAuth2Session',
         'x-twitter-active-user': 'yes',
         'x-twitter-client-language': 'en',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36',
-        cookie: `auth_token=${creds.authToken}; ct0=${creds.ct0}`,
       },
+      cookies: { auth_token: creds.authToken, ct0: creds.ct0 },
+      timeout: 30000,
     })
   } catch (e: any) {
     throw new Error(`X GraphQL 请求失败：${e?.message || e}（需登录的推文）`)
@@ -168,8 +175,8 @@ async function fetchGraphqlTweet(http: AxiosInstance, id: string, creds: Twitter
 
   if (res.status === 403 || res.status === 429) {
     throw new Error(
-      `X GraphQL 被 Cloudflare 拦截 (HTTP ${res.status})：服务端 Node 的 TLS 指纹与浏览器不同，` +
-      `cookie 无法抵达应用层。需在 TLS 指纹模拟环境（如 curl-impersonate / Puppeteer / 代理）运行才能解析需登录推文。`
+      `X GraphQL 被 Cloudflare 拦截 (HTTP ${res.status})：TLS 指纹校验未通过。` +
+      `请确认已安装可选依赖 cycletls（npm i cycletls），否则服务端 Node 的 TLS 指纹与浏览器不同会被 CF 拒绝。`
     )
   }
   if (res.status !== 200) {
@@ -177,14 +184,15 @@ async function fetchGraphqlTweet(http: AxiosInstance, id: string, creds: Twitter
   }
 
   const result = res.data?.data?.tweetResult?.result
-  if (!result || ['TweetTombstone', 'TweetUnavailable', 'TweetWithVisibilityResults'].includes(result.__typename) && !result.legacy) {
+  if (!result) throw new Error('X GraphQL 返回无数据')
+  if (result.__typename === 'TweetTombstone' || result.__typename === 'TweetUnavailable') {
     const tb = result?.tombstone?.text?.text || result?.tombstone?.text
     throw new Error(`推文不可访问（可能需要登录、已被删除或为非公开内容）${tb ? '：' + tb : ''}`)
   }
   return mapGraphql(result)
 }
 
-export async function parseTwitter(url: string, http: AxiosInstance, creds?: TwitterCreds): Promise<ParsedData> {
+export async function parseTwitter(url: string, http: AxiosInstance, creds?: TwitterCreds, getGraphql?: GraphqlGetter): Promise<ParsedData> {
   const id = extractTweetId(url)
   if (!id) throw new Error('无法从 X 链接提取推文 ID')
 
@@ -199,9 +207,9 @@ export async function parseTwitter(url: string, http: AxiosInstance, creds?: Twi
     return mapSyndication(tw)
   }
 
-  // 2) tombstone（需登录）：回退到鉴权 GraphQL
+  // 2) tombstone（需登录）：回退到鉴权 GraphQL（TLS 指纹模拟）
   if (creds && creds.authToken && creds.ct0) {
-    return fetchGraphqlTweet(http, id, creds)
+    return fetchGraphqlTweet(id, creds, getGraphql || tlsGet)
   }
   const reasonRaw = pick(tw?.tombstone?.text, tw?.tombstone?.name)
   throw new Error(`推文不可访问（可能需要登录、已被删除或为非公开内容）${reasonRaw ? '：' + reasonRaw : ''}`)

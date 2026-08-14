@@ -88,15 +88,11 @@ describe('fetchApi — twitter 路由到原生解析', () => {
 
 describe('parseTwitter — 登录态 GraphQL 回退', () => {
   const creds = { authToken: 'tok', ct0: 'ct0val' }
-  // 路由 mock：syndication 返回 tombstone，graphql 按 url 返回不同结果
-  function routeHttp(graphqlPayload: any, status = 200): any {
-    return {
-      get: async (url: string) => {
-        if (url.includes('syndication')) return { data: { __typename: 'TweetTombstone', tombstone: {} } }
-        return { status, data: graphqlPayload }
-      },
-    }
-  }
+  // syndication 恒返回 tombstone（公开路径不可用）
+  const syndicationHttp = { get: async () => ({ data: { __typename: 'TweetTombstone', tombstone: {} } }) }
+  // GraphQL GET 器（第 4 参注入，替代真实 cycletls）
+  const gqlGet = (payload: any, status = 200) => async () => ({ status, data: payload })
+
   const gqlTweet = {
     data: { tweetResult: { result: {
       __typename: 'Tweet', rest_id: '2059244332285313260',
@@ -117,11 +113,11 @@ describe('parseTwitter — 登录态 GraphQL 回退', () => {
   }
 
   it('无 creds 且 tombstone → 抛需登录错误', async () => {
-    await expect(parseTwitter('https://x.com/u/status/2059244332285313260', routeHttp(gqlTweet))).rejects.toThrow(/不可访问|登录/)
+    await expect(parseTwitter('https://x.com/u/status/2059244332285313260', syndicationHttp)).rejects.toThrow(/不可访问|登录/)
   })
 
   it('有 creds + GraphQL 200 → 解析需登录推文', async () => {
-    const t = await parseTwitter('https://x.com/u/status/2059244332285313260', routeHttp(gqlTweet), creds)
+    const t = await parseTwitter('https://x.com/u/status/2059244332285313260', syndicationHttp, creds, gqlGet(gqlTweet))
     expect(t.type).toBe('video')
     expect(t.video).toBe('https://video/832.mp4')       // 取最高码率
     expect(t.videos[0].url).toBe('https://video/832.mp4')
@@ -136,8 +132,18 @@ describe('parseTwitter — 登录态 GraphQL 回退', () => {
     expect(t.publishTime).toBe(Date.parse('Fri Jan 01 00:00:00 +0000 2021'))
   })
 
+  it('TweetWithVisibilityResults 包裹 → 解包 .tweet 解析', async () => {
+    const wrapped = { data: { tweetResult: { result: {
+      __typename: 'TweetWithVisibilityResults',
+      tweet: gqlTweet.data.tweetResult.result,
+    } } } }
+    const t = await parseTwitter('https://x.com/u/status/2059244332285313260', syndicationHttp, creds, gqlGet(wrapped))
+    expect(t.type).toBe('video')
+    expect(t.video).toBe('https://video/832.mp4')
+  })
+
   it('有 creds + GraphQL 403 → 抛 Cloudflare 指纹错误', async () => {
-    await expect(parseTwitter('https://x.com/u/status/2059244332285313260', routeHttp({}, 403), creds))
+    await expect(parseTwitter('https://x.com/u/status/2059244332285313260', syndicationHttp, creds, gqlGet({}, 403)))
       .rejects.toThrow(/Cloudflare|TLS 指纹/)
   })
 })
