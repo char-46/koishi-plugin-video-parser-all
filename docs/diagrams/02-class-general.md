@@ -97,7 +97,9 @@ classDiagram
     }
 ```
 
-## 模块级工具函数依赖
+## 平台无关工具函数依赖（按模块归属）
+
+> 拆分后纯函数分布在 `utils/`、`engine/`、`sender/`、`platforms/`。下图标注各函数所属文件。
 
 ```mermaid
 classDiagram
@@ -105,64 +107,82 @@ classDiagram
 
     class linkTypeParser {
         <<function>>
-        +call(content, customRules) LinkMatch[]
+        +file: utils/url.ts
+        +call(content, rules) LinkMatch[]
     }
     class cleanUrl {
         <<function>>
+        +file: utils/url.ts
         +call(url) string
     }
     class extractAllUrlsFromMessage {
         <<function>>
-        +call(session, customRules) LinkMatch[]
+        +file: utils/url.ts
+        +call(session, rules) LinkMatch[]
     }
     class BUILTIN_LINK_RULES {
-        <<const {pattern,type}[]>>
+        <<const>>
+        +file: platforms/rules.ts
     }
     class buildCustomLinkRules {
         <<function>>
-        +call(customPlatforms) {pattern,type}[]
+        +file: platforms/custom.ts
+        +call(customPlatforms) Rule[]
     }
-
     class parseApiResponse {
         <<function 核心引擎>>
+        +file: engine/parser.ts
         +call(raw, maxDescLen, fieldMapping) ParsedData
-        -mapField(name, fallback)
     }
     class getNestedValue {
         <<function>>
+        +file: utils/field-mapping.ts
         +call(obj, path) any
     }
     class pickBestQuality {
         <<function>>
+        +file: utils/common.ts
         +call(videoBackup) VideoQuality[]
     }
     class parseCount {
         <<function>>
+        +file: utils/common.ts
         +call(val) number
     }
     class generateFormattedText {
         <<function>>
+        +file: utils/format.ts
         +call(p, format, index?, total?) string
     }
     class formatDuration {
         <<function>>
+        +file: utils/format.ts
         +call(seconds) string
     }
     class formatPublishTime {
         <<function>>
+        +file: utils/format.ts
         +call(ms) string
     }
     class parseFieldMapping {
         <<function>>
-        +call(mappingStr) Record~string,string~ | undefined
+        +file: utils/field-mapping.ts
+        +call(mappingStr) Record
+    }
+    class contentFingerprint {
+        <<function>>
+        +file: utils/common.ts
+        +call(p: ParsedData) string
+    }
+    class buildForwardNode {
+        <<function>>
+        +file: sender/forward.ts
+        +call(session, content, botName)
     }
 
-    linkTypeParser ..> BUILTIN_LINK_RULES : 默认合并
     linkTypeParser ..> cleanUrl
     extractAllUrlsFromMessage ..> linkTypeParser
     extractAllUrlsFromMessage ..> cleanUrl
-    buildCustomLinkRules ..> BUILTIN_LINK_RULES : 输出合并到 customRules
-
     parseApiResponse ..> getNestedValue : mapField
     parseApiResponse ..> pickBestQuality
     parseApiResponse ..> parseCount
@@ -170,95 +190,106 @@ classDiagram
     generateFormattedText ..> formatPublishTime
 ```
 
-## apply 闭包内部依赖（运行期核心）
+## 运行期函数依赖（ParserRuntime 注入）
+
+> 原 `apply` 闭包内的 8 个函数已抽为模块级函数，统一接收 `rt: ParserRuntime`（依赖注入）。`apply` 退化为薄入口。
 
 ```mermaid
 classDiagram
     direction TB
 
     class apply {
-        <<export function 入口>>
+        <<function 薄入口>>
+        +file: index.ts
         +call(ctx, config)
-        -初始化 dedupCache / urlCacheLocal / contentDedupCache
-        -customPlatforms 转换
-        -注册 message 事件 / parse 命令 / dispose
+        -createRuntime / 注册 message,parse,dispose
+    }
+
+    class ParserRuntime {
+        <<interface>>
+        +file: runtime.ts
+        +ctx / config / http
+        +dedupCache / urlCacheLocal / contentDedupCache
+        +customPlatforms / allRules / proxyConfig
     }
 
     class getPlatformConfig {
-        <<inner function>>
-        +call(type) PlatformConf
-        -查 customPlatforms / customApis
-        -查 defaultDedicatedApis
-        -合并 globalFieldMapping
+        <<function>>
+        +file: platforms/custom.ts
+        +call(rt, type) PlatformConf
     }
     class buildAuthHeaders {
-        <<inner function>>
-        +call(apiKey, type, name) Record~string,string~
+        <<function>>
+        +file: platforms/custom.ts
+        +call(apiKey, type, name)
     }
     class getText {
-        <<inner function>>
-        +call(key) string
-        -6 个默认文案兜底
-    }
-    class contentFingerprint {
-        <<inner function>>
-        +call(p: ParsedData) string
+        <<function>>
+        +file: utils/common.ts
+        +call(config, key) string
     }
 
     class flush {
-        <<inner function 编排>>
-        +call(session, matches)
+        <<function 编排>>
+        +file: sender/flush.ts
+        +call(rt, session, matches)
     }
     class processSingleUrl {
-        <<inner function>>
-        +call(url, type, fieldMapping, conf)
+        <<function>>
+        +file: engine/fetcher.ts
+        +call(rt, url, type, ...)
     }
     class parseUrl {
-        <<inner function>>
-        +call(url, type, fieldMapping, conf)
+        <<function>>
+        +file: engine/fetcher.ts
+        +call(rt, url, type, ...)
     }
     class fetchApi {
-        <<inner function>>
-        +call(url, type, fieldMapping, conf) ParsedData
+        <<function>>
+        +file: engine/fetcher.ts
+        +call(rt, url, type, ...) ParsedData
     }
     class sendWithTimeout {
-        <<inner function>>
-        +call(session, content, customRetries?)
+        <<function>>
+        +file: sender/sender.ts
+        +call(rt, session, content, retries?)
     }
     class sendMedia {
-        <<inner function>>
-        +call(session, url, type, showFile)
-    }
-    class buildForwardNode {
-        <<module function>>
-        +call(session, content, botName)
+        <<function>>
+        +file: sender/sender.ts
+        +call(rt, session, url, type, showFile)
     }
 
-    apply ..> flush : message 事件 / parse 命令
+    apply ..> ParserRuntime : createRuntime
+    apply ..> flush : message,parse
+    apply ..> sendWithTimeout : 等待提示
     flush ..> getPlatformConfig
     flush ..> processSingleUrl
     flush ..> sendWithTimeout
     flush ..> sendMedia
-    flush ..> buildForwardNode
-    flush ..> contentFingerprint
-    flush ..> generateFormattedText_ext : 经 processSingleUrl
+    flush ..> buildForwardNode_ext
+    flush ..> contentFingerprint_ext
+    flush ..> getText
     processSingleUrl ..> parseUrl
     processSingleUrl ..> generateFormattedText_ext
     parseUrl ..> fetchApi
     fetchApi ..> getPlatformConfig
     fetchApi ..> buildAuthHeaders
     fetchApi ..> parseApiResponse_ext
-    fetchApi ..> urlCacheLocal : 缓存
+    fetchApi ..> ParserRuntime : urlCacheLocal
     sendMedia ..> sendWithTimeout
 
+    class buildForwardNode_ext {
+        <<sender/forward.ts>>
+    }
+    class contentFingerprint_ext {
+        <<utils/common.ts>>
+    }
     class generateFormattedText_ext {
-        <<module function>>
+        <<utils/format.ts>>
     }
     class parseApiResponse_ext {
-        <<module function>>
-    }
-    class urlCacheLocal {
-        SimpleLRUCache~ParsedData~
+        <<engine/parser.ts>>
     }
 ```
 
@@ -272,7 +303,7 @@ classDiagram
     }
     class BasicSet {
         enable / botName / showWaitingTip / debug
-        platformEnabled (25 项)
+        platformEnabled (27 项)
     }
     class MessageFormat {
         unifiedMessageFormat
@@ -303,8 +334,8 @@ classDiagram
     }
     class ApiPlatform {
         primaryApiUrl / backupApiUrl
-        platformDedicatedFirst (25 项)
-        customApis / customPlatforms
+        platformDedicatedFirst (27 项)
+        customApis (27 项) / customPlatforms
         globalFieldMapping
     }
     class UIText {
@@ -329,5 +360,6 @@ classDiagram
 
 - **`ParsedData`** 是整个插件的**统一数据契约**：所有平台 API 的响应都经 `parseApiResponse` 规范化为该结构，发送端只依赖它。
 - **`parseApiResponse`** 是唯一的解析引擎，通过 `mapField(name, fallback)` 实现「字段映射优先 + 多字段名 fallback 容错」，使一套代码兼容所有平台。
-- **平台间无代码差异**：差异仅体现在数据（`BUILTIN_LINK_RULES` 链接规则、`defaultDedicatedApis` 专属 API、`backupAllowed` 白名单、`platformEnabled`/`platformDedicatedFirst` 开关）。
-- **多实例隐患**：`debugEnabled`（`index.ts:347`）为模块级 `let`，在 `apply` 内被赋值，多实例会互相覆盖（拆分阶段将修正）。
+- **平台间无代码差异**：差异仅体现在数据（`platforms/rules.ts` 链接规则、`platforms/dedicated-apis.ts` 专属 API、`engine/fetcher.ts` 的 `backupAllowed` 白名单、`config.ts` 开关）。
+- **多实例隐患已修复**：原模块级 `let debugEnabled` 在 `apply` 内被赋值会互相覆盖；现改为 `utils/logger.ts` 的 `setDebugEnabled()`，每个 `apply` 调用时设置（注：仍为模块级单例，多实例共享同一开关——彻底隔离需进一步实例化，但已消除直接赋值的隐式耦合）。
+- **依赖注入**：运行期函数统一接收 `ParserRuntime`（`runtime.ts`），解耦了原 `apply` 闭包对局部状态的捕获，便于测试与扩展。

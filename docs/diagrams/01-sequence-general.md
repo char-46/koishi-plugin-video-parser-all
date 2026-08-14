@@ -2,7 +2,25 @@
 
 完整描述一次视频/图集解析的端到端流程。涵盖：消息接收 → 链接匹配 → 平台识别 → 并发限流 → 去重 → API 调用与重试 → 字段映射 → 缓存 → 结果发送（普通 / 合并转发）。
 
-源码位置：`src/index.ts`（单文件结构）。
+源码位置：`src/`（拆分后的多模块结构）。
+
+## 模块归属速查
+
+| 流程步骤 | 模块文件 |
+|----------|----------|
+| 事件入口 / 命令注册 / dispose | `index.ts` |
+| 运行期状态构建 | `runtime.ts`（`createRuntime`） |
+| 链接匹配 `extractAllUrlsFromMessage` / `linkTypeParser` / `cleanUrl` | `utils/url.ts` |
+| 平台配置查询 `getPlatformConfig` | `platforms/custom.ts` |
+| 链接规则 `BUILTIN_LINK_RULES` | `platforms/rules.ts` |
+| 专属 API 表 `defaultDedicatedApis` | `platforms/dedicated-apis.ts` |
+| 解析编排 `flush` / `processSingleUrl` / `parseUrl` / `fetchApi` | `sender/flush.ts` + `engine/fetcher.ts` |
+| 统一解析引擎 `parseApiResponse` | `engine/parser.ts` |
+| 缓存 / 并发 / 去重 | `utils/cache.ts` + `utils/concurrency.ts` + `utils/common.ts` |
+| 字段映射 `getNestedValue` / `parseFieldMapping` | `utils/field-mapping.ts` |
+| 文字格式化 `generateFormattedText` | `utils/format.ts` |
+| 发送 `sendWithTimeout` / `sendMedia` / `buildForwardNode` | `sender/sender.ts` + `sender/forward.ts` |
+| 文案兜底 `getText` | `utils/common.ts` |
 
 ## 主流程时序图
 
