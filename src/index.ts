@@ -1,307 +1,21 @@
 import { Context, h } from 'koishi'
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios'
 import { name, Config } from './config'
-import type { VideoQuality, ParsedData, LinkMatch, ApiItem, CustomPlatformConfig } from './types'
+import type { ParsedData, LinkMatch, ApiItem, CustomPlatformConfig } from './types'
 import { SimpleLRUCache } from './utils/cache'
 import { ConcurrencyLimiter } from './utils/concurrency'
 import { logger, debugLog, setDebugEnabled } from './utils/logger'
-import { delay, getErrorMessage, parseCount, pickBestQuality, contentFingerprint } from './utils/common'
-import { getNestedValue, parseFieldMapping } from './utils/field-mapping'
+import { delay, getErrorMessage, contentFingerprint } from './utils/common'
+import { parseFieldMapping } from './utils/field-mapping'
 import { generateFormattedText } from './utils/format'
+import { linkTypeParser, extractAllUrlsFromMessage } from './utils/url'
+import { parseApiResponse } from './engine/parser'
+import { buildForwardNode } from './sender/forward'
+import { BUILTIN_LINK_RULES } from './platforms/rules'
+import { defaultDedicatedApis } from './platforms/dedicated-apis'
+import { buildCustomLinkRules, buildAuthHeaders } from './platforms/custom'
 
 export { name, Config }
-
-const BUILTIN_LINK_RULES: { pattern: RegExp; type: string }[] = [
-  { pattern: /https?:\/\/(?:www\.)?bilibili\.com\/video\/([ab]v[0-9a-zA-Z_-]+)(?:\?[^\s'"“”‘’]*)?/gi, type: 'bilibili' },
-  { pattern: /https?:\/\/b23\.tv\/[0-9a-zA-Z_\/-]+/gi, type: 'bilibili' },
-  { pattern: /https?:\/\/bili\d+\.cn\/[0-9a-zA-Z_\/-]+/gi, type: 'bilibili' },
-  { pattern: /https?:\/\/b23\.wtf\/[0-9a-zA-Z_\/-]+/gi, type: 'bilibili' },
-  { pattern: /https?:\/\/bili2233\.cn\/[0-9a-zA-Z_\/-]+/gi, type: 'bilibili' },
-  { pattern: /https?:\/\/(?:www\.)?douyin\.com\/video\/\d{10,}/gi, type: 'douyin' },
-  { pattern: /https?:\/\/v\.douyin\.com\/[0-9a-zA-Z_\/-]+/gi, type: 'douyin' },
-  { pattern: /https?:\/\/(?:www\.)?kuaishou\.com\/short-video\/[0-9a-zA-Z_\/-]+/gi, type: 'kuaishou' },
-  { pattern: /https?:\/\/v\.kuaishou\.com\/[0-9a-zA-Z_\/-]+/gi, type: 'kuaishou' },
-  { pattern: /https?:\/\/(?:www\.)?kuaishou\.com\/f\/[0-9a-zA-Z_\/-]+/gi, type: 'kuaishou' },
-  { pattern: /https?:\/\/(?:www\.)?xiaohongshu\.com\/discovery\/item\/[0-9a-zA-Z_\/-]+/gi, type: 'xiaohongshu' },
-  { pattern: /https?:\/\/xhslink\.com\/[0-9a-zA-Z_\/-]+/gi, type: 'xiaohongshu' },
-  { pattern: /https?:\/\/(?:www\.)?xiaohongshu\.com\/explore\/[0-9a-zA-Z_\/-]+/gi, type: 'xiaohongshu' },
-  { pattern: /https?:\/\/(?:www\.)?xiaohongshu\.com\/board\/[0-9a-zA-Z_\/-]+/gi, type: 'xiaohongshu' },
-  { pattern: /https?:\/\/weibo\.com\/\d+\/[0-9a-zA-Z_\/-]+/gi, type: 'weibo' },
-  { pattern: /https?:\/\/video\.weibo\.com\/show\?fid=[0-9a-zA-Z_\/-]+/gi, type: 'weibo' },
-  { pattern: /https?:\/\/t\.cn\/[0-9a-zA-Z_\/-]+/gi, type: 'weibo' },
-  { pattern: /https?:\/\/m\.weibo\.cn\/[0-9a-zA-Z_\/-]+/gi, type: 'weibo' },
-  { pattern: /https?:\/\/(?:www\.)?ixigua\.com\/\d{10,}/gi, type: 'xigua' },
-  { pattern: /https?:\/\/(?:www\.)?youtube\.com\/watch\?v=[a-zA-Z0-9_-]{11}/gi, type: 'youtube' },
-  { pattern: /https?:\/\/youtu\.be\/[0-9a-zA-Z_\/-]+/gi, type: 'youtube' },
-  { pattern: /https?:\/\/(?:www\.)?youtube\.com\/shorts\/[0-9a-zA-Z_\/-]+/gi, type: 'youtube' },
-  { pattern: /https?:\/\/(?:www\.)?tiktok\.com\/@[\w.]+\/video\/\d{10,}/gi, type: 'tiktok' },
-  { pattern: /https?:\/\/vm\.tiktok\.com\/[0-9a-zA-Z_\/-]+/gi, type: 'tiktok' },
-  { pattern: /https?:\/\/vt\.tiktok\.com\/[0-9a-zA-Z_\/-]+/gi, type: 'tiktok' },
-  { pattern: /https?:\/\/(?:www\.)?acfun\.cn\/v\/ac\d{10,}/gi, type: 'acfun' },
-  { pattern: /https?:\/\/(?:www\.)?zhihu\.com\/video\/\d{10,}/gi, type: 'zhihu' },
-  { pattern: /https?:\/\/(?:www\.|m\.)?zhihu\.com\/question\/\d+\/answer\/\d+/gi, type: 'zhihu' },
-  { pattern: /https?:\/\/zhuanlan\.zhihu\.com\/p\/\d+/gi, type: 'zhihu' },
-  { pattern: /https?:\/\/(?:www\.|m\.)?zhihu\.com\/zvideo\/\d+/gi, type: 'zhihu' },
-  { pattern: /https?:\/\/weishi\.qq\.com\/weishi\/feed\/[0-9a-zA-Z_\/-]+/gi, type: 'weishi' },
-  { pattern: /https?:\/\/(?:www\.)?huya\.com\/video\/[0-9a-zA-Z_\/-]+/gi, type: 'huya' },
-  { pattern: /https?:\/\/haokan\.baidu\.com\/v\?vid=[0-9a-zA-Z_\/-]+/gi, type: 'haokan' },
-  { pattern: /https?:\/\/(?:www\.)?meipai\.com\/media\/\d{10,}/gi, type: 'meipai' },
-  { pattern: /https?:\/\/twitter\.com\/\w+\/status\/\d{10,}/gi, type: 'twitter' },
-  { pattern: /https?:\/\/x\.com\/\w+\/status\/\d{10,}/gi, type: 'twitter' },
-  { pattern: /https?:\/\/(?:www\.)?instagram\.com\/p\/[0-9a-zA-Z_\/-]+/gi, type: 'instagram' },
-  { pattern: /https?:\/\/(?:www\.)?instagram\.com\/reel\/[0-9a-zA-Z_\/-]+/gi, type: 'instagram' },
-  { pattern: /https?:\/\/(?:www\.)?instagram\.com\/share\/(?:reel|p)\/[0-9a-zA-Z_\/-]+/gi, type: 'instagram' },
-  { pattern: /https?:\/\/(?:www\.)?doubao\.com\/video\/\d{10,}/gi, type: 'doubao' },
-  { pattern: /https?:\/\/(?:www\.)?doubao\.com\/video-sharing\?[^\s'"“”‘’]*/gi, type: 'doubao' },
-  { pattern: /https?:\/\/(?:www\.)?doubao\.com\/thread\/[^\s'"“”‘’]+/gi, type: 'doubao_image' },
-  { pattern: /https?:\/\/(?:www\.)?jimeng\.jianying\.com\/[^\s'"“”‘’]*/gi, type: 'jimeng' },
-  { pattern: /https?:\/\/(?:www\.)?jimeng\.cn\/[^\s'"“”‘’]*/gi, type: 'jimeng' },
-  { pattern: /https?:\/\/(?:www\.)?dreamina\.jianying\.com\/[^\s'"“”‘’]*/gi, type: 'jimeng' },
-  { pattern: /https?:\/\/(?:www\.)?dreamina\.capcut\.com\/[^\s'"“”‘’]*/gi, type: 'jimeng' },
-  { pattern: /https?:\/\/(?:www\.)?oasis\.weibo\.com\/v\/[0-9a-zA-Z_\/-]+/gi, type: 'oasis' },
-  { pattern: /https?:\/\/channels\.weixin\.qq\.com\/[0-9a-zA-Z_\/-]+/gi, type: 'wechat_channel' },
-  { pattern: /https?:\/\/weixin\.qq\.com\/sph\/[0-9a-zA-Z_\/-]+/gi, type: 'wechat_channel' },
-  { pattern: /https?:\/\/(?:www\.)?pearvideo\.com\/video_\d+/gi, type: 'lishi' },
-  { pattern: /https?:\/\/video\.li\/[0-9a-zA-Z_\/-]+/gi, type: 'lishi' },
-  { pattern: /https?:\/\/(?:www\.)?quanmin\.tv\/[0-9a-zA-Z_\/-]+/gi, type: 'quanmin' },
-  { pattern: /https?:\/\/(?:www\.)?quanmintv\.cn\/[0-9a-zA-Z_\/-]+/gi, type: 'quanmin' },
-  { pattern: /https?:\/\/h5\.pipigx\.com\/pp\/post\/\d+/gi, type: 'pipigx' },
-  { pattern: /https?:\/\/(?:www\.)?ippzone\.com\/[0-9a-zA-Z_\/-]+/gi, type: 'pipigx' },
-  { pattern: /https?:\/\/(?:h5|www)\.pipix\.com\/[0-9a-zA-Z_\/-]+/gi, type: 'pipixia' },
-  { pattern: /https?:\/\/(?:www\.)?pipixia\.com\/[0-9a-zA-Z_\/-]+/gi, type: 'pipixia' },
-  { pattern: /https?:\/\/share\.xiaochuankeji\.cn\/hybrid\/share\/post\?pid=\d+/gi, type: 'zuiyou' },
-  { pattern: /https?:\/\/(?:h5|www)\.izuiyou\.com\/[0-9a-zA-Z_\/-]+/gi, type: 'zuiyou' },
-]
-
-function buildCustomLinkRules(customPlatforms: any[]): { pattern: RegExp; type: string }[] {
-  if (!Array.isArray(customPlatforms) || customPlatforms.length === 0) return []
-  return customPlatforms
-    .filter(p => p.keywords)
-    .map(p => {
-      const keywords = p.keywords.split(',').map((s: string) => s.trim()).filter(Boolean)
-      if (keywords.length === 0) return null
-      const escaped = keywords.map((k: string) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-      const pattern = new RegExp(`https?://[^/\\s"'“”‘’]*(${escaped.join('|')})[^\\s"'“”‘’]*`, 'gi')
-      return { pattern, type: `custom_${p.name}` }
-    })
-    .filter(Boolean) as { pattern: RegExp; type: string }[]
-}
-
-function linkTypeParser(content: string, customRules: { pattern: RegExp; type: string }[]): LinkMatch[] {
-  content = content.replace(/\\\//g, '/')
-  const allRules = [...BUILTIN_LINK_RULES, ...customRules]
-  const matches: LinkMatch[] = []
-  const seen = new Set<string>()
-  for (const rule of allRules) {
-    let match: RegExpExecArray | null
-    rule.pattern.lastIndex = 0
-    while ((match = rule.pattern.exec(content)) !== null) {
-      let url = match[0]
-      url = cleanUrl(url)
-      if (!url) continue
-      if (seen.has(url)) continue
-      seen.add(url)
-      matches.push({ type: rule.type, url, id: match[1] || url })
-    }
-  }
-  return matches
-}
-
-function cleanUrl(url: string): string {
-  url = url.replace(/&amp;/g, '&')
-            .replace(/&quot;/g, '"')
-            .replace(/&lt;/g, '<')
-            .replace(/&gt;/g, '>')
-            .replace(/\\\//g, '/')
-  url = url.replace(/^[\s"'<“”‘’]+/, '')
-  url = url.replace(/[\s"'<>\{\}\[\]`,;，。！？：；“”‘’…—～]+$/, '')
-  if (!/^https?:\/\//i.test(url)) {
-    if (/^\/\//.test(url)) url = 'https:' + url
-    else return url
-  }
-  return url
-}
-
-function extractAllUrlsFromMessage(session: any, customRules: { pattern: RegExp; type: string }[]): LinkMatch[] {
-  const content = session.content?.trim() || ''
-  const matchedLinks = linkTypeParser(content, customRules)
-  const cardsContent: string[] = []
-  if (session.elements) {
-    for (const elem of session.elements) {
-      if (elem.type === 'xml' && elem.data) cardsContent.push(elem.data)
-      else if (elem.type === 'json' && elem.data) {
-        try {
-          const json = JSON.parse(elem.data)
-          const extract = (obj: any) => {
-            if (!obj || typeof obj !== 'object') return
-            for (const val of Object.values(obj)) {
-              if (typeof val === 'string') cardsContent.push(val)
-              else if (typeof val === 'object') extract(val)
-            }
-          }
-          extract(json)
-        } catch {}
-      }
-    }
-  }
-  for (const cardContent of cardsContent) {
-    matchedLinks.push(...linkTypeParser(cardContent, customRules))
-  }
-  const cleanResult: LinkMatch[] = []
-  const seenUrls = new Set<string>()
-  for (const link of matchedLinks) {
-    const cleaned = cleanUrl(link.url)
-    if (!cleaned || !/^https?:\/\//i.test(cleaned)) continue
-    if (!seenUrls.has(cleaned)) {
-      seenUrls.add(cleaned)
-      cleanResult.push({ ...link, url: cleaned })
-    }
-  }
-  return cleanResult
-}
-
-function parseApiResponse(raw: any, maxDescLen: number, fieldMapping?: Record<string, string>): ParsedData {
-  debugLog('DEBUG', 'API raw response', raw)
-  const data = raw?.data || {}
-  const extra = data.extra || {}
-
-  const mapField = (name: string, fallback: () => any) => {
-    if (fieldMapping && fieldMapping[name]) {
-      const value = getNestedValue(raw, fieldMapping[name])
-      if (value !== undefined) return value
-    }
-    return fallback()
-  }
-
-  let type = mapField('type', () => {
-    let t = data.type || data.videoType || ''
-    if (!t) {
-      if (data.images?.length > 0 && !data.url) t = 'image'
-      else if (data.live_photo?.length > 0) t = 'live_photo'
-      else if (raw.msg === 'live' || data.live) t = 'live'
-      else t = 'video'
-    }
-    return t
-  })
-
-  let authorObj = mapField('author', () => data.author || data.user)
-  let author = '', uid = '', avatar = ''
-  if (authorObj && typeof authorObj === 'object') {
-    author = authorObj.name || authorObj.author || ''
-    uid = String(authorObj.id || authorObj.userID || data.uid || data.userID || data.author_id || '')
-    avatar = authorObj.avatar || data.avatar || ''
-  } else {
-    author = mapField('author', () => data.author || data.auther || '')
-    uid = String(mapField('uid', () => data.uid || data.userID || data.author_id || ''))
-    avatar = mapField('avatar', () => data.avatar || '')
-  }
-
-  let title = mapField('title', () => data.title || '')
-  let desc = (mapField('desc', () => data.desc || data.description || '') as string).slice(0, maxDescLen).trim()
-  const coverRaw = mapField('cover', () => data.cover || '')
-  const cover = coverRaw ? (String(coverRaw).startsWith('http') ? String(coverRaw) : 'https:' + String(coverRaw)) : ''
-
-  let video = ''
-  let videos: VideoQuality[] = []
-  const videoBackup = mapField('video_backup', () => data.video_backup)
-  if (Array.isArray(videoBackup) && videoBackup.length) {
-    const bestQ = pickBestQuality(videoBackup)
-    videos = bestQ
-    video = bestQ[0]?.url || ''
-  }
-  if (!video) {
-    const rawVideos = mapField('videos', () => data.videos)
-    if (Array.isArray(rawVideos) && rawVideos.length) {
-      const validVideos = rawVideos.filter((v: any) => v && v.url)
-      if (validVideos.length) {
-        video = validVideos[0].url
-        videos = validVideos.map((v: any) => ({ quality: v.accept?.[0] || 'unknown', url: v.url }))
-      }
-    }
-  }
-  if (!video && data.quality_urls && typeof data.quality_urls === 'object') {
-    const entries = Object.entries(data.quality_urls)
-    videos = entries.map(([label, url]) => ({ quality: label, url: String(url) }))
-    if (videos.length) video = videos[0].url
-  }
-  if (!video) video = mapField('video', () => data.url || '')
-  if (video && !video.startsWith('http')) video = 'https:' + video
-
-  let images: string[] = []
-  const directImages = mapField('images', () => data.images)
-  if (Array.isArray(directImages)) {
-    images = directImages.filter((img: any) => img && typeof img === 'string').map((img: any) => img.startsWith('http') ? img : 'https:' + img)
-  } else if (Array.isArray(data.imgurl)) {
-    images = data.imgurl.filter((img: any) => img && typeof img === 'string').map((img: any) => img.startsWith('http') ? img : 'https:' + img)
-  }
-
-  const live_photo = Array.isArray(data.live_photo) ? data.live_photo.filter((lp: any) => lp && lp.image).map((lp: any) => ({
-    image: lp.image.startsWith('http') ? lp.image : 'https:' + lp.image,
-    video: lp.video ? (lp.video.startsWith('http') ? lp.video : 'https:' + lp.video) : ''
-  })) : []
-
-  if (type === 'live' && live_photo.length > 0 && !data.live) {
-    type = 'live_photo'
-  }
-
-  const musicCoverRaw = mapField('music_cover', () => data.music?.cover || data.music?.albumCover?.url || '')
-  const musicUrlRaw = mapField('music_url', () => data.music?.url || data.music?.playURL || '')
-  const music = {
-    title: mapField('music_title', () => data.music?.title || data.music?.name || '') as string,
-    author: mapField('music_author', () => data.music?.author || data.music?.artist || '') as string,
-    cover: musicCoverRaw ? (String(musicCoverRaw).startsWith('http') ? String(musicCoverRaw) : 'https:' + String(musicCoverRaw)) : '',
-    url: musicUrlRaw ? (String(musicUrlRaw).startsWith('http') ? String(musicUrlRaw) : 'https:' + String(musicUrlRaw)) : '',
-  }
-
-  const like = parseCount(mapField('like', () => data.like ?? data.statistics?.digg_count ?? data.statistics?.like_count ?? data.statistics?.likes ?? extra.statistics?.digg_count ?? extra.statistics?.like_count ?? extra.statistics?.likes ?? data.attitudes_count ?? 0))
-  const comment = parseCount(mapField('comment', () => data.comment ?? data.statistics?.comment_count ?? data.statistics?.comments ?? extra.statistics?.comment_count ?? extra.statistics?.comments ?? data.comments_count ?? 0))
-  const collect = parseCount(mapField('collect', () => data.collect ?? data.statistics?.collect_count ?? data.statistics?.favorite_count ?? data.statistics?.favorites ?? extra.statistics?.collect_count ?? extra.statistics?.favorite_count ?? extra.statistics?.favorites ?? data.favorites_count ?? 0))
-  const share = parseCount(mapField('share', () => data.share ?? data.statistics?.share_count ?? data.statistics?.forward_count ?? data.statistics?.shares ?? extra.statistics?.share_count ?? extra.statistics?.forward_count ?? extra.statistics?.shares ?? data.reposts_count ?? 0))
-  const play = parseCount(mapField('play', () => data.play ?? data.statistics?.play_count ?? data.statistics?.view_count ?? data.statistics?.plays ?? extra.statistics?.play_count ?? extra.statistics?.view_count ?? extra.statistics?.plays ?? data.play_count ?? data.view_count ?? 0))
-
-  let duration = 0
-  if (extra.duration_ms) {
-    duration = Math.floor(Number(extra.duration_ms) / 1000)
-  } else {
-    const durRaw = mapField('duration', () => data.duration)
-    if (durRaw) {
-      duration = typeof durRaw === 'string' ? parseInt(durRaw, 10) : Number(durRaw)
-    }
-  }
-
-  let publishTime = 0
-  const timeRaw = mapField('publishTime', () => data.time)
-  if (timeRaw) {
-    publishTime = typeof timeRaw === 'number' ? timeRaw : parseInt(timeRaw, 10)
-    if (publishTime < 1000000000000) publishTime *= 1000
-  } else if (extra.create_time) {
-    publishTime = Number(extra.create_time) * 1000
-  }
-
-  const author_followers = parseCount(mapField('author_followers', () => extra.author_extra?.follower_count ?? data.author_extra?.follower_count ?? 0))
-  const author_signature = String(mapField('author_signature', () => extra.author_extra?.signature ?? data.author_extra?.signature ?? ''))
-  const admire = parseCount(mapField('admire', () => extra.statistics?.admire_count ?? data.statistics?.admire_count ?? 0))
-
-  title = title.replace(/\[话题\]/g, '')
-  desc = desc.replace(/\[话题\]/g, '')
-
-  if (title && desc && title.trim() === desc.trim()) {
-    desc = ''
-  }
-
-  if (title.trim().startsWith('#')) title = ''
-  if (desc.trim().startsWith('#')) desc = ''
-
-  return { type, title, desc, author, uid, avatar, cover, video, videos, images, live_photo, music, like, comment, collect, share, play, duration, publishTime, author_followers, author_signature, admire }
-}
-
-function buildForwardNode(session: any, content: any, botName: string) {
-  let messageContent: any[]
-  if (Array.isArray(content)) messageContent = content
-  else if (content && typeof content === 'object' && content.type) messageContent = [content]
-  else messageContent = [h.text(String(content))]
-  return h('node', { user: { nickname: botName.substring(0, 15), user_id: session.selfId } }, messageContent)
-}
 
 export function apply(ctx: Context, config: any) {
   setDebugEnabled(config.debug || false)
@@ -354,22 +68,6 @@ export function apply(ctx: Context, config: any) {
     }
 
     const custom = config.customApis?.find((item: any) => item.platform === type)
-    const defaultDedicatedApis: Record<string, string> = {
-      bilibili: 'https://api.bugpk.com/api/bilibili',
-      douyin: 'https://api.bugpk.com/api/douyin',
-      doubao: 'https://api.bugpk.com/api/dbvideos',
-      doubao_image: 'https://api.bugpk.com/api/dbduihua',
-      kuaishou: 'https://api.bugpk.com/api/kuaishou',
-      xiaohongshu: 'https://api.bugpk.com/api/xhs',
-      jimeng: 'https://api.bugpk.com/api/jimengai',
-      toutiao: 'https://api.bugpk.com/api/toutiao',
-      weibo: 'https://api.bugpk.com/api/weibo',
-      huya: 'https://api.bugpk.com/api/huya',
-      pipigx: 'https://api.bugpk.com/api/pipigx',
-      pipixia: 'https://api.bugpk.com/api/pipixia',
-      zuiyou: 'https://api.bugpk.com/api/zuiyou',
-      wechat_channel: 'https://api.bugpk.com/api/wxsph',
-    }
     let apiUrl = defaultDedicatedApis[type] || null
     let apiKey = ''
     let authHeaderType = 'Bearer'
@@ -389,14 +87,6 @@ export function apply(ctx: Context, config: any) {
       fieldMapping = parseFieldMapping(config.globalFieldMapping)
     }
     return { apiUrl, dedicatedFirst, apiKey, authHeaderType, customHeaderName, fieldMapping }
-  }
-
-  function buildAuthHeaders(apiKey: string, authHeaderType: string, customHeaderName: string): Record<string, string> {
-    if (!apiKey) return {}
-    if (authHeaderType === 'Bearer') return { 'Authorization': `Bearer ${apiKey}` }
-    if (authHeaderType === 'X-API-Key') return { 'X-API-Key': apiKey }
-    if (authHeaderType === 'Custom' && customHeaderName) return { [customHeaderName]: apiKey }
-    return {}
   }
 
   async function sendWithTimeout(session: any, content: any, customRetries?: number): Promise<any> {
@@ -700,6 +390,7 @@ export function apply(ctx: Context, config: any) {
   }
 
   const customRules = buildCustomLinkRules(config.customPlatforms || [])
+  const allRules = [...BUILTIN_LINK_RULES, ...customRules]
 
   const axiosConfig: AxiosRequestConfig = {
     timeout: config.timeout,
@@ -728,7 +419,7 @@ export function apply(ctx: Context, config: any) {
     if (session.subtype === 'file_upload') return
     if (session.elements?.some(elem => elem.type === 'file' || elem.type === 'folder')) return
     if (session.selfId === session.userId) return
-    const matches = extractAllUrlsFromMessage(session, customRules)
+    const matches = extractAllUrlsFromMessage(session, allRules)
     if (!matches.length) return
     debugLog('INFO', `检测到 ${matches.length} 个链接`)
     if (config.showWaitingTip) {
@@ -743,12 +434,12 @@ export function apply(ctx: Context, config: any) {
 
   ctx.command('parse <url>', '手动解析视频').action(async ({ session }, url) => {
     if (!url) { await sendWithTimeout(session, getText('invalidLinkText')); return }
-    const matches = linkTypeParser(url, customRules)
+    const matches = linkTypeParser(url, allRules)
     if (!matches.length) { await sendWithTimeout(session, getText('invalidLinkText')); return }
-    if (config.showWaitingTip) { 
-      try { 
-        await sendWithTimeout(session, h.quote(session?.messageId) + getText('waitingTipText')) 
-      } catch {} 
+    if (config.showWaitingTip) {
+      try {
+        await sendWithTimeout(session, h.quote(session?.messageId) + getText('waitingTipText'))
+      } catch {}
     }
     await flush(session, matches)
   })

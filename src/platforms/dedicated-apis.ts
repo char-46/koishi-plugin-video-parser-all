@@ -1,0 +1,16 @@
+export const defaultDedicatedApis: Record<string, string> = {
+  bilibili: 'https://api.bugpk.com/api/bilibili',
+  douyin: 'https://api.bugpk.com/api/douyin',
+  doubao: 'https://api.bugpk.com/api/dbvideos',
+  doubao_image: 'https://api.bugpk.com/api/dbduihua',
+  kuaishou: 'https://api.bugpk.com/api/kuaishou',
+  xiaohongshu: 'https://api.bugpk.com/api/xhs',
+  jimeng: 'https://api.bugpk.com/api/jimengai',
+  toutiao: 'https://api.bugpk.com/api/toutiao',
+  weibo: 'https://api.bugpk.com/api/weibo',
+  huya: 'https://api.bugpk.com/api/huya',
+  pipigx: 'https://api.bugpk.com/api/pipigx',
+  pipixia: 'https://api.bugpk.com/api/pipixia',
+  zuiyou: 'https://api.bugpk.com/api/zuiyou',
+  wechat_channel: 'https://api.bugpk.com/api/wxsph',
+}
