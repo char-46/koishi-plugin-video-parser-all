@@ -33,9 +33,27 @@ async function getClient(): Promise<any> {
         const mod = await import('cycletls')
         init = (mod as any).default || mod
       } catch (e) {
+        // 未安装：不缓存失败，装好后无需重启即可生效
+        clientPromise = null
         throw new Error('TLS 指纹模拟库 cycletls 未安装（可选依赖）。解析需登录的 X 推文需要它：npm i cycletls')
       }
-      return init()
+      try {
+        return await init()
+      } catch (e: any) {
+        // 初始化失败同样不缓存，下次解析时自动重试
+        clientPromise = null
+        // cycletls 内部 reject 的是字符串（无 .message），外层包装后 message 变成 "undefined"
+        const raw = typeof e === 'string' ? e : String(e?.message || e)
+        if (/Failed to initialize CycleTLS|Could not connect to the CycleTLS instance/i.test(raw)) {
+          throw new Error(
+            'CycleTLS 子进程初始化失败（20 秒内无法连接 ws://localhost:9119）。' +
+            '常见原因：① 杀毒软件拦截/隔离了 node_modules/cycletls/dist/index.exe（请加白名单后重装依赖）；' +
+            '② 端口 9119 被其他进程占用（netstat -ano | findstr 9119）；' +
+            '③ 运行环境禁止 spawn 子进程。'
+          )
+        }
+        throw new Error(`CycleTLS 初始化失败：${raw}`)
+      }
     })()
   }
   return clientPromise
