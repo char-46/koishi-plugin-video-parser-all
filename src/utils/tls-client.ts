@@ -1,3 +1,5 @@
+import { spawnSync } from 'child_process'
+
 /**
  * TLS 指纹模拟 HTTP 客户端（惰性）。
  *
@@ -25,6 +27,36 @@ export interface TlsResponse {
 
 let clientPromise: Promise<any> | null = null
 
+/** 按平台给出对症的排查提示 */
+function platformHints(): string {
+  const bin = process.platform === 'win32' ? 'index.exe' : `index${process.platform === 'linux' ? (process.arch === 'arm' ? '-arm' : process.arch === 'arm64' ? '-arm64' : '') : ''}`
+  if (process.platform === 'win32') {
+    return '常见原因：① 杀毒软件拦截/隔离了 node_modules/cycletls/dist/index.exe（加白名单后重装依赖）；' +
+      '② 端口 9119 被占用（netstat -ano | findstr 9119）；③ 运行环境禁止 spawn 子进程。'
+  }
+  if (process.platform === 'linux') {
+    return `常见原因：① 二进制缺执行权限（chmod +x node_modules/cycletls/dist/${bin} 后重启）；` +
+      '② 端口 9119 被占用（ss -tlnp | grep 9119）；③ 容器环境禁止 spawn 子进程（检查 seccomp/AppArmor/容器运行时策略）。'
+  }
+  return `常见原因：① 二进制缺执行权限（chmod +x node_modules/cycletls/dist/${bin}）；` +
+    '② 端口 9119 被占用（lsof -i :9119）；③ 运行环境禁止 spawn 子进程。'
+}
+
+/**
+ * 运行时探针：用 node 自身派生一个无害子进程，判定环境是否允许 spawn。
+ * Koishi 框架本身不限制子进程；被禁止只可能来自宿主环境（容器 seccomp/
+ * AppArmor/gVisor、云函数、AppLocker、杀软）。返回 null 表示 spawn 可用。
+ */
+function probeSpawn(): string | null {
+  try {
+    const r = spawnSync(process.execPath, ['-e', ''], { timeout: 5000 })
+    if (r.error) return `Node 自探测失败（${(r.error as NodeJS.ErrnoException).code || r.error.message}）`
+    return null
+  } catch (e: any) {
+    return `Node 自探测异常（${e?.message || e}）`
+  }
+}
+
 async function getClient(): Promise<any> {
   if (!clientPromise) {
     clientPromise = (async () => {
@@ -45,11 +77,13 @@ async function getClient(): Promise<any> {
         // cycletls 内部 reject 的是字符串（无 .message），外层包装后 message 变成 "undefined"
         const raw = typeof e === 'string' ? e : String(e?.message || e)
         if (/Failed to initialize CycleTLS|Could not connect to the CycleTLS instance/i.test(raw)) {
+          const probe = probeSpawn()
+          const probeMsg = probe === null
+            ? '自检：本环境可正常 spawn 子进程，问题应出在 cycletls 二进制本身（被拦截/无执行权限/崩溃）。'
+            : `自检：${probe}，此环境禁止派生子进程，cycletls 无法使用，请改用第三方解析 API 或更换运行环境。`
           throw new Error(
-            'CycleTLS 子进程初始化失败（20 秒内无法连接 ws://localhost:9119）。' +
-            '常见原因：① 杀毒软件拦截/隔离了 node_modules/cycletls/dist/index.exe（请加白名单后重装依赖）；' +
-            '② 端口 9119 被其他进程占用（netstat -ano | findstr 9119）；' +
-            '③ 运行环境禁止 spawn 子进程。'
+            `CycleTLS 子进程初始化失败（20 秒内无法连接 ws://localhost:9119，平台 ${process.platform}/${process.arch}）。` +
+            probeMsg + platformHints()
           )
         }
         throw new Error(`CycleTLS 初始化失败：${raw}`)
