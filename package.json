@@ -1,7 +1,7 @@
 {
-  "name": "koishi-plugin-video-parser-all",
+  "name": "@char46/koishi-plugin-video-parser-all",
   "description": "Koishi 全平台视频/图集解析插件，支持抖音/快手/B站/微博/小红书/YouTube/TikTok等20+平台",
-  "version": "1.5.8",
+  "version": "1.6.0",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "bin": {
@@ -108,14 +108,25 @@
   "peerDependencies": {
     "koishi": "^4.18.7"
   },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "koishi": {
+    "description": {
+      "en": "Universal video/album parser for 27+ platforms (Douyin, Kuaishou, Bilibili, Weibo, Xiaohongshu, YouTube, TikTok, X/Twitter, etc.)",
+      "zh": "全平台视频/图集解析插件，支持抖音/快手/B站/微博/小红书/YouTube/TikTok/X等27+平台，去水印发送，可配置第三方解析代理与字段映射"
+    },
+    "preview": false
+  },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Minecraft-1314/koishi-plugin-video-parser-all.git"
+    "url": "git+https://github.com/char-46/koishi-plugin-video-parser-all.git"
   },
   "bugs": {
-    "url": "https://github.com/Minecraft-1314/koishi-plugin-video-parser-all/issues"
+    "url": "https://github.com/char-46/koishi-plugin-video-parser-all/issues"
   },
-  "homepage": "https://github.com/Minecraft-1314/koishi-plugin-video-parser-all#readme",
+  "homepage": "https://github.com/char-46/koishi-plugin-video-parser-all#readme",
   "engines": {
     "node": ">=16.0.0"
   }
