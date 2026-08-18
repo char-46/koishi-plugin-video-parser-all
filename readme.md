@@ -1,5 +1,8 @@
 # @char46/koishi-plugin-video-parser-all
 
+> 本项目 fork 自 [Minecraft-1314/koishi-plugin-video-parser-all](https://github.com/Minecraft-1314/koishi-plugin-video-parser-all)（MIT），感谢原作者。
+> Forked from Minecraft-1314's MIT-licensed project. Credits to the original author.
+
 ## 项目介绍 (Project Introduction)
 
 ### 中文
@@ -197,8 +200,12 @@ Public tweets use the syndication API with zero config. **Login-required tweets*
 
 ## 许可协议 (License)
 
-本项目采用 MIT 许可证，详情参见 [LICENSE](LICENSE) 文件。  
-This project is licensed under the MIT License, see the [LICENSE](LICENSE) file for details.
+本项目（插件本体）采用 **MIT** 许可证，基于 [Minecraft-1314/koishi-plugin-video-parser-all](https://github.com/Minecraft-1314/koishi-plugin-video-parser-all) 的 MIT 项目 fork 而来，详情参见 [LICENSE](LICENSE) 文件。  
+This project (the plugin itself) is licensed under the **MIT** License, forked from the MIT-licensed project by Minecraft-1314. See the [LICENSE](LICENSE) file for details.
+
+**第三方组件分层说明 (Third-party components)**：
+- `cycletls`（可选依赖，仅 X/Twitter 登录态解析使用）：[GPL-3.0](https://github.com/Danny-Dasilva/CycleTLS/blob/master/LICENSE)。它作为独立子进程运行（进程边界 + WebSocket 通信），不包含在本包的发布产物中，其 GPL 义务不及于本插件。
+- `@char46/cycletls-linux-musl-x64`（可选依赖，musl/Alpine 环境的静态二进制）：独立 npm 包，以 GPL-3.0 单独分发并附带源码指向，同样不包含在本包发布产物中。
 
 ## 支持我们 (Support Us)
 

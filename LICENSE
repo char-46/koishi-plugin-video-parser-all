@@ -1,0 +1,34 @@
+MIT License
+
+Copyright (c) 2026 Minecraft-1314 (original author)
+Copyright (c) 2026 char46 (fork maintainer)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+Third-party components (optional, not part of this software's license):
+
+- cycletls (https://github.com/Danny-Dasilva/CycleTLS) — GPL-3.0
+  Optional runtime dependency used only for X/Twitter authenticated parsing.
+  Communicates over a separate process boundary (WebSocket), and is not
+  distributed inside this package's tarball.
+- @char46/cycletls-linux-musl-x64 — GPL-3.0
+  Static musl build of the cycletls Go binary, distributed as a separate
+  npm package under GPL-3.0 with its own LICENSE and source attribution.
