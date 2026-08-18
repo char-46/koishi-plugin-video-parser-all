@@ -48,15 +48,17 @@ export function apply(ctx: Context, config: any) {
     await flush(rt, session, matches)
   })
 
-  ctx.command('parse/diag', '诊断 X 登录态解析环境（cycletls）').action(async ({ session }) => {
-    await sendWithTimeout(rt, session, '开始诊断 cycletls 环境，约需 30 秒…')
-    try {
-      const lines = await diagnoseTls()
-      await sendWithTimeout(rt, session, lines.join('\n'))
-    } catch (e: any) {
-      await sendWithTimeout(rt, session, '诊断异常：' + (e?.message || e))
-    }
-  })
+  if (config.enableDiagCommand !== false) {
+    ctx.command('parse/diag', '诊断 X 登录态解析环境（cycletls）').action(async ({ session }) => {
+      await sendWithTimeout(rt, session, '开始诊断 cycletls 环境，约需 30 秒…')
+      try {
+        const lines = await diagnoseTls()
+        await sendWithTimeout(rt, session, lines.join('\n'))
+      } catch (e: any) {
+        await sendWithTimeout(rt, session, '诊断异常：' + (e?.message || e))
+      }
+    })
+  }
 
   ctx.on('dispose', () => {
     rt.urlCacheLocal.clear()

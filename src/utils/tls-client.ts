@@ -100,12 +100,7 @@ function preflightBinary(): void {
   const r = spawnSync(info.path, [], { env: { WS_PORT: String(probePort) }, timeout: 1500, windowsHide: true })
   if (r.error) {
     const code = (r.error as NodeJS.ErrnoException).code || r.error.message
-    throw new Error(
-      `cycletls 二进制无法执行（${code}）：${info.path}。` +
-      (code === 'EPERM' || code === 'EACCES'
-        ? '环境安全策略（容器 seccomp/AppArmor/只读文件系统 noexec/沙箱）阻止执行该二进制，cycletls 在此环境不可用，请改用第三方解析 API 或更换运行环境。'
-        : '请检查文件完整性与权限。')
-    )
+    throw new Error(`cycletls 二进制无法执行（${code}）：${info.path}。${explainSpawnError(String(code), info.path)}`)
   }
   if (r.status !== null) {
     throw new Error(
@@ -212,6 +207,62 @@ export async function shutdownTlsClient(): Promise<void> {
   }
 }
 
+/**
+ * 解析 ELF 的 PT_INTERP（动态链接解释器）：
+ * 文件存在但 exec 返回 ENOENT 时，几乎总是 glibc 二进制跑在 musl/Alpine 上
+ * （解释器 /lib64/ld-linux-x86-64.so.2 不存在）。纯 JS 读 ELF 头确证。
+ */
+function checkElfInterp(binPath: string): { ok: boolean; interp: string | null; staticLinked: boolean } {
+  try {
+    const fd = fs.openSync(binPath, 'r')
+    try {
+      const header = Buffer.alloc(64)
+      if (fs.readSync(fd, header, 0, 64, 0) < 64) return { ok: true, interp: null, staticLinked: false }
+      if (header[0] !== 0x7f || header[1] !== 0x45 || header[2] !== 0x4c || header[3] !== 0x46) return { ok: true, interp: null, staticLinked: false }
+      const is64 = header[4] === 2
+      const phoff = is64 ? Number(header.readBigUInt64LE(0x20)) : header.readUInt32LE(0x1c)
+      const phentsize = header.readUInt16LE(is64 ? 0x36 : 0x2a)
+      const phnum = header.readUInt16LE(is64 ? 0x38 : 0x2c)
+      const ph = Buffer.alloc(phentsize * phnum)
+      if (fs.readSync(fd, ph, 0, ph.length, phoff) < ph.length) return { ok: true, interp: null, staticLinked: false }
+      for (let i = 0; i < phnum; i++) {
+        const off = i * phentsize
+        if (ph.readUInt32LE(off) !== 3) continue // PT_INTERP
+        const p_offset = is64 ? Number(ph.readBigUInt64LE(off + 0x08)) : ph.readUInt32LE(off + 0x04)
+        const p_filesz = is64 ? Number(ph.readBigUInt64LE(off + 0x20)) : ph.readUInt32LE(off + 0x10)
+        const buf = Buffer.alloc(p_filesz)
+        fs.readSync(fd, buf, 0, p_filesz, p_offset)
+        const interp = buf.toString('utf8', 0, buf.indexOf(0)).trim()
+        return { ok: fs.existsSync(interp), interp, staticLinked: false }
+      }
+      return { ok: true, interp: null, staticLinked: true } // 无 PT_INTERP = 静态链接
+    } finally {
+      fs.closeSync(fd)
+    }
+  } catch {
+    return { ok: true, interp: null, staticLinked: false }
+  }
+}
+
+/** 把 spawn/exec 错误码翻译成精确原因与对策 */
+function explainSpawnError(code: string, binPath: string): string {
+  if (code === 'EPERM' || code === 'EACCES') {
+    return '环境安全策略阻止执行该二进制（容器 seccomp/AppArmor/noexec 挂载/沙箱），cycletls 在此环境不可用，请改用第三方解析 API 或更换运行环境。'
+  }
+  if (code === 'ENOENT') {
+    const ei = checkElfInterp(binPath)
+    if (!ei.ok) {
+      return (
+        `动态链接解释器缺失：二进制需要 ${ei.interp}，此环境没有（典型于 Alpine/musl 容器运行 glibc 二进制，exec 因此报 ENOENT）。` +
+        '解决：① 容器内安装 glibc 兼容层（apk add gcompat libc6-compat）后重启 Koishi；' +
+        '② 或改用 glibc（Debian 版 Node）镜像部署。'
+      )
+    }
+    return '文件在检查后被删除或路径失效，请重装依赖（npm i cycletls --force）。'
+  }
+  return `请检查文件完整性与权限（${code}）。`
+}
+
 /** 检查端口占用（与 cycletls 相同的探测方式） */
 function checkPortFree(port: number): Promise<'free' | 'occupied'> {
   return new Promise((resolve) => {
@@ -263,6 +314,13 @@ async function doDiagnose(): Promise<string[]> {
   }
   lines.push(`[1] ✓ 二进制存在：${bin.path}（${(bin.size / 1048576).toFixed(1)}MB，权限 ${(bin.mode & 0o777).toString(8)}）`)
   if (bin.size < 1024 * 1024) lines.push('[1] ⚠ 体积异常偏小，疑似损坏，建议重装')
+  if (process.platform !== 'win32') {
+    const ei = checkElfInterp(bin.path)
+    if (ei.staticLinked) lines.push('[1] ✓ 静态链接（无外部运行时依赖）')
+    else if (ei.interp) lines.push(ei.ok
+      ? `[1] ✓ 动态链接，解释器 ${ei.interp} 存在`
+      : `[1] ✗ 动态链接，解释器 ${ei.interp} 缺失（Alpine/musl 环境跑 glibc 二进制会 exec 报 ENOENT）`)
+  }
 
   const probe = probeSpawn()
   if (probe) {
@@ -290,10 +348,7 @@ async function doDiagnose(): Promise<string[]> {
     await new Promise((r) => setTimeout(r, 2000))
     if (spawnErr) {
       const code = spawnErr.code || spawnErr.message
-      lines.push(`[3] ✗ 二进制无法执行（${code}）` +
-        (code === 'EPERM' || code === 'EACCES'
-          ? '：环境安全策略（容器 seccomp/AppArmor/noexec 挂载/沙箱）阻止执行该二进制，cycletls 在此环境不可用。'
-          : '：请检查文件完整性与权限。'))
+      lines.push(`[3] ✗ 二进制无法执行（${code}）。${explainSpawnError(String(code), bin.path)}`)
       return lines
     }
     if (child.exitCode !== null) {

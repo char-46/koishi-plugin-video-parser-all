@@ -29,7 +29,7 @@ This is a **multi-platform video/image parsing plugin** developed for the Koishi
    npm i cycletls
    ```
    X 的 GraphQL 端点受 Cloudflare TLS 指纹校验保护，Node 原生 TLS 握手会被直接 403；cycletls（Go 二进制）可模拟 Chrome 指纹
-3. **环境要求**：允许派生子进程（部分容器/PaaS 禁止）。遇到初始化失败时发送 `parse/diag`，会在聊天中输出逐项自检结果（二进制状态、spawn 权限、端口占用、完整初始化）
+3. **环境要求**：允许派生子进程（部分容器/PaaS 禁止）。遇到初始化失败时发送 `parse/diag`，会在聊天中输出逐项自检结果（二进制状态、ELF 链接与解释器、spawn 权限、端口占用、完整初始化）。诊断命令可在配置 `enableDiagCommand` 中关闭
 
 Public tweets use the syndication API with zero config. **Login-required tweets** need credentials (`auth_token` + `ct0` cookies) and the optional dependency `cycletls` (Chrome TLS fingerprint impersonation to bypass Cloudflare). Run `parse/diag` in chat to troubleshoot without shell access.
 
@@ -42,6 +42,7 @@ Public tweets use the syndication API with zero config. **Login-required tweets*
 | `botName` | string | 视频解析机器人 | 合并转发中的昵称 (Nickname in forward messages) |
 | `showWaitingTip` | boolean | true | 显示等待提示 (Show waiting tip) |
 | `debug` | boolean | false | Debug 日志 (Debug logging) |
+| `enableDiagCommand` | boolean | true | 启用 `parse/diag` 诊断命令 (Enable the `parse/diag` diagnostic command) |
 | `platformEnabled` | object | 全开 (All enabled) | 各平台开关 (Platform switches) |
 
 ### 消息格式 (Message Format)

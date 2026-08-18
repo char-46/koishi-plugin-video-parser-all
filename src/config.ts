@@ -8,6 +8,7 @@ export const Config = Schema.intersect([
     botName: Schema.string().default('视频解析机器人').description('合并转发中显示的昵称'),
     showWaitingTip: Schema.boolean().default(true).description('显示等待提示'),
     debug: Schema.boolean().default(false).description('开启调试日志'),
+    enableDiagCommand: Schema.boolean().default(true).description('启用 parse/diag 环境诊断命令'),
     platformEnabled: Schema.object({
       bilibili: Schema.boolean().default(true).description('哔哩哔哩'),
       douyin: Schema.boolean().default(true).description('抖音'),
