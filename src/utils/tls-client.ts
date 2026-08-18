@@ -123,13 +123,13 @@ function preflightBinary(): void {
     }
   }
   // exec 探针：随机端口拉起后由 timeout 收割。出错/秒退在这里同步暴露。
+  // 注意：常驻服务二进制永不主动退出，spawnSync 超时收割时 r.error=ETIMEDOUT、
+  // r.status=null —— 这恰恰说明二进制活着，必须放行；其余错误码才是真失败。
   const probePort = 20000 + Math.floor(Math.random() * 40000)
-  const r = spawnSync(info.path, [], { env: { WS_PORT: String(probePort) }, timeout: 1500, windowsHide: true })
-  if (r.error) {
-    const code = (r.error as NodeJS.ErrnoException).code || r.error.message
-    // musl 环境下官方 glibc 二进制的 ENOENT 已由子包方案规避；走到这里说明
-    // 子包二进制也失败（或 glibc 环境异常），提示按来源对症处理
-    throw new Error(`cycletls 二进制无法执行（${code}）：${info.path}。${explainSpawnError(String(code), info.path)}`)
+  const r = spawnSync(info.path, [], { env: { WS_PORT: String(probePort) }, timeout: 2500, windowsHide: true })
+  const errCode = r.error ? ((r.error as NodeJS.ErrnoException).code || r.error.message) : null
+  if (r.error && errCode !== 'ETIMEDOUT') {
+    throw new Error(`cycletls 二进制无法执行（${errCode}）：${info.path}。${explainSpawnError(String(errCode), info.path)}`)
   }
   if (r.status !== null) {
     throw new Error(
