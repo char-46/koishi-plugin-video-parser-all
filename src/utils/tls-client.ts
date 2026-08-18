@@ -1,6 +1,7 @@
-import { spawnSync } from 'child_process'
+import { spawn, spawnSync, type ChildProcess } from 'child_process'
 import fs from 'fs'
 import path from 'path'
+import net from 'net'
 
 /**
  * TLS 指纹模拟 HTTP 客户端（惰性）。
@@ -187,4 +188,89 @@ export async function shutdownTlsClient(): Promise<void> {
     } catch {}
     clientPromise = null
   }
+}
+
+/** 检查端口占用（与 cycletls 相同的探测方式） */
+function checkPortFree(port: number): Promise<'free' | 'occupied'> {
+  return new Promise((resolve) => {
+    const srv = net.createServer()
+    srv.once('error', () => resolve('occupied'))
+    srv.listen(port, '127.0.0.1', () => srv.close(() => resolve('free')))
+  })
+}
+
+/**
+ * 无 shell 环境的完整自检（供 parse/diag 命令调用）：
+ * 逐项输出 cycletls 依赖链每一环的状态，失败环节即根因。
+ */
+export async function diagnoseTls(): Promise<string[]> {
+  const lines: string[] = []
+  lines.push(`[0] 平台 ${process.platform}/${process.arch}，Node ${process.versions.node}`)
+
+  const bin = locateBinary()
+  if (!bin) {
+    lines.push('[1] ✗ cycletls 模块未安装（npm i cycletls）')
+    return lines
+  }
+  if (!bin.exists) {
+    lines.push(`[1] ✗ 二进制缺失：${bin.path}（npm i cycletls --force 重装）`)
+    return lines
+  }
+  lines.push(`[1] ✓ 二进制存在：${bin.path}（${(bin.size / 1048576).toFixed(1)}MB，权限 ${(bin.mode & 0o777).toString(8)}）`)
+  if (bin.size < 1024 * 1024) lines.push('[1] ⚠ 体积异常偏小，疑似损坏，建议重装')
+
+  const probe = probeSpawn()
+  if (probe) {
+    lines.push(`[2] ✗ spawn 探针失败：${probe}（环境禁止派生子进程）`)
+    return lines
+  }
+  lines.push('[2] ✓ spawn 探针：可派生子进程')
+
+  // 直接拉起二进制（随机端口），验证其能否存活并监听
+  const port = 20000 + Math.floor(Math.random() * 40000)
+  let child: ChildProcess | null = null
+  let stderr = ''
+  try {
+    child = spawn(bin.path, [], {
+      env: { WS_PORT: String(port) },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    })
+    child.stderr?.on('data', (d) => { if (stderr.length < 500) stderr += String(d) })
+    await new Promise((r) => setTimeout(r, 2000))
+    if (child.exitCode !== null) {
+      lines.push(`[3] ✗ 二进制启动即退（exit=${child.exitCode}${child.signalCode ? ' signal=' + child.signalCode : ''}）` +
+        (stderr.trim() ? `，stderr：${stderr.trim().slice(0, 300)}` : '（无输出，可能被安全策略静默击杀或 CPU 不支持指令集）'))
+      return lines
+    }
+    const listening = await new Promise<boolean>((resolve) => {
+      const s = net.connect({ port, host: '127.0.0.1', timeout: 3000 })
+      s.once('connect', () => { s.destroy(); resolve(true) })
+      s.once('error', () => resolve(false))
+      s.once('timeout', () => { s.destroy(); resolve(false) })
+    })
+    lines.push(listening
+      ? `[3] ✓ 二进制可存活并监听 127.0.0.1:${port}`
+      : `[3] ✗ 二进制存活但未监听端口（环境禁止绑定端口）${stderr.trim() ? '，stderr：' + stderr.trim().slice(0, 300) : ''}`)
+  } finally {
+    try { child?.kill('SIGKILL') } catch {}
+  }
+
+  // 默认端口 9119 占用情况
+  lines.push(`[4] 端口 9119：${await checkPortFree(9119) === 'free' ? '空闲 ✓' : '已被占用 ⚠（若是其他实例的 cycletls 属正常共享；否则会抢答握手导致初始化超时）'}`)
+
+  // 完整初始化（随机端口，避开可能被污染的 9119）
+  try {
+    const mod = await import('cycletls')
+    const init = (mod as any).default || mod
+    const c = await init({ port: 30000 + Math.floor(Math.random() * 20000), timeout: 15000 })
+    lines.push('[5] ✓ initCycleTLS 完整初始化成功')
+    try { await c.exit() } catch {}
+    lines.push('结论：环境正常。若解析仍报初始化失败，多半是 9119 被非 cycletls 进程占用（见 [4]）。')
+  } catch (e: any) {
+    const raw = typeof e === 'string' ? e : String(e?.message || e)
+    lines.push(`[5] ✗ initCycleTLS 完整初始化失败：${raw}`)
+    lines.push('结论：二进制可 spawn 但 JS 侧连不上，请把以上全部输出发给维护者。')
+  }
+  return lines
 }
