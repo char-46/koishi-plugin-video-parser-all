@@ -244,6 +244,18 @@ function checkElfInterp(binPath: string): { ok: boolean; interp: string | null; 
   }
 }
 
+/** 探测当前 Linux 运行时 libc：读 Node 自身 ELF 解释器 + Alpine 标志 */
+function detectRuntimeLibc(): { libc: 'glibc' | 'musl' | 'unknown'; alpine: boolean; nodeInterp: string | null } {
+  if (process.platform !== 'linux') return { libc: 'unknown', alpine: false, nodeInterp: null }
+  const alpine = fs.existsSync('/etc/alpine-release')
+  let interp: string | null = null
+  try { interp = checkElfInterp(process.execPath).interp } catch {}
+  if (interp?.includes('musl')) return { libc: 'musl', alpine, nodeInterp: interp }
+  if (interp?.includes('ld-linux')) return { libc: 'glibc', alpine, nodeInterp: interp }
+  if (fs.existsSync('/lib/ld-musl-x86_64.so.1')) return { libc: 'musl', alpine, nodeInterp: interp }
+  return { libc: 'unknown', alpine, nodeInterp: interp }
+}
+
 /** 把 spawn/exec 错误码翻译成精确原因与对策 */
 function explainSpawnError(code: string, binPath: string): string {
   if (code === 'EPERM' || code === 'EACCES') {
@@ -252,8 +264,12 @@ function explainSpawnError(code: string, binPath: string): string {
   if (code === 'ENOENT') {
     const ei = checkElfInterp(binPath)
     if (!ei.ok) {
+      const rt = detectRuntimeLibc()
+      const verdict = rt.libc === 'musl'
+        ? `已实锤：运行时是 musl${rt.alpine ? '（Alpine）' : ''}（Node 解释器 ${rt.nodeInterp || '/lib/ld-musl-x86_64.so.1'}），而二进制需要 glibc 解释器 ${ei.interp}。`
+        : `二进制需要 glibc 解释器 ${ei.interp}，此环境没有（运行时 libc 探测：${rt.libc}${rt.alpine ? '，Alpine' : ''}）。`
       return (
-        `动态链接解释器缺失：二进制需要 ${ei.interp}，此环境没有（典型于 Alpine/musl 容器运行 glibc 二进制，exec 因此报 ENOENT）。` +
+        `动态链接解释器缺失：${verdict}` +
         '解决：① 容器内安装 glibc 兼容层（apk add gcompat libc6-compat）后重启 Koishi；' +
         '② 或改用 glibc（Debian 版 Node）镜像部署。'
       )
@@ -301,7 +317,13 @@ export async function diagnoseTls(): Promise<string[]> {
 
 async function doDiagnose(): Promise<string[]> {
   const lines: string[] = []
-  lines.push(`[0] 平台 ${process.platform}/${process.arch}，Node ${process.versions.node}`)
+  {
+    const rt = detectRuntimeLibc()
+    const libcInfo = process.platform === 'linux'
+      ? `，libc：${rt.libc}${rt.alpine ? '（Alpine）' : ''}`
+      : ''
+    lines.push(`[0] 平台 ${process.platform}/${process.arch}，Node ${process.versions.node}${libcInfo}`)
+  }
 
   const bin = locateBinary()
   if (!bin) {
