@@ -1,4 +1,4 @@
-# koishi-plugin-video-parser-all
+# @char46/koishi-plugin-video-parser-all
 
 ## 项目介绍 (Project Introduction)
 
@@ -9,14 +9,29 @@
 This is a **multi-platform video/image parsing plugin** developed for the Koishi bot framework, using a unified API interface to automatically recognize and parse short video/image/live photo links from **20+ mainstream platforms** such as Douyin, Kuaishou, Bilibili, Xiaohongshu, Weibo, Xigua, YouTube, TikTok, AcFun, Zhihu, Weishi, Huya, Haokan, Meipai, Twitter/X, Instagram, Doubao (video/images), **Jimeng (AI video/image)**, Oasis, WeChat Channels, Lishi, Quanmin, Pipigx, Pipixia, Zuiyou and more.
 
 ## 项目仓库 (Repository)
-- GitHub: `https://github.com/Minecraft-1314/koishi-plugin-video-parser-all`
-- Issues: `https://github.com/Minecraft-1314/koishi-plugin-video-parser-all/issues`
+- GitHub: `https://github.com/char-46/koishi-plugin-video-parser-all`
+- Issues: `https://github.com/char-46/koishi-plugin-video-parser-all/issues`
 
 ## 核心指令 (Core Commands)
 
 | 指令 (Command) | 说明 (Description) | 示例 (Example) |
 |----------------|--------------------|----------------|
 | `parse <url>` | 手动解析指定的视频/图集链接 | `parse https://v.douyin.com/xxxx/` |
+| `parse/diag` | 诊断 X/Twitter 登录态解析环境（cycletls），无需服务器 shell | `parse/diag` |
+
+## X/Twitter 登录态解析 (X/Twitter Authenticated Parsing)
+
+公开推文走 syndication API，无需任何配置。**需登录的推文**（被墙/受限制内容）需要：
+
+1. **配置凭证**：在插件配置中填入你浏览器登录 X 后的 `auth_token` 与 `ct0` 两个 Cookie 值
+2. **安装可选依赖 cycletls**（在 Koishi 应用目录执行）：
+   ```bash
+   npm i cycletls
+   ```
+   X 的 GraphQL 端点受 Cloudflare TLS 指纹校验保护，Node 原生 TLS 握手会被直接 403；cycletls（Go 二进制）可模拟 Chrome 指纹
+3. **环境要求**：允许派生子进程（部分容器/PaaS 禁止）。遇到初始化失败时发送 `parse/diag`，会在聊天中输出逐项自检结果（二进制状态、spawn 权限、端口占用、完整初始化）
+
+Public tweets use the syndication API with zero config. **Login-required tweets** need credentials (`auth_token` + `ct0` cookies) and the optional dependency `cycletls` (Chrome TLS fingerprint impersonation to bypass Cloudflare). Run `parse/diag` in chat to troubleshoot without shell access.
 
 ## 配置项说明 (Configuration)
 
@@ -167,6 +182,7 @@ This is a **multi-platform video/image parsing plugin** developed for the Koishi
 | 贡献者 (Contributor) | 贡献内容 (Contribution) |
 |----------------------|-------------------------|
 | Minecraft-1314 | 插件完整开发 (Complete plugin development) |
+| char46 | 模块化重构、X/Twitter 登录态解析（cycletls + GraphQL 回退）、CLI、测试框架、`parse/diag` 诊断 (Modular refactor, X/Twitter authenticated parsing via cycletls + GraphQL fallback, CLI, test framework, `parse/diag` diagnostics) |
 | ShiraiKuroko003 | 修复消息格式设置问题并且PR-1.2.5版本已修复 (Fixed message format issue, PR-1.2.5) |
 | cyavb | 提交功能建议-给自定义API添加KEY认证-已采纳 (Suggested custom API key auth - adopted) |
 | Keep785 | 提交Bug-无法正常关闭发送封面-已修复<br>提交Bug-解析问题-已修复 (Reported bug - cannot disable cover sending - fixed<br>Reported bug - parsing issue - fixed) |

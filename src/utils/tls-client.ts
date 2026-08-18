@@ -63,8 +63,11 @@ function locateBinary(): { path: string; exists: boolean; size: number; mode: nu
 
 /**
  * 预检并自愈 cycletls 二进制：
- * - 不支持的平台/缺失二进制 → 立即报精确错误（不等 20s 超时）
- * - 非 Windows 缺执行位 → 自动 chmod 755（复制/同步丢权限是最常见的 Linux 故障）
+ * - 不支持的平台/缺失/损坏 → 立即报精确错误（不等 20s 超时）
+ * - 非 Windows 缺执行位 → 自动 chmod 755
+ * - exec 探针：同步拉起二进制 1.5s，环境拒绝执行（EPERM/EACCES）或秒退时
+ *   干净报错。关键作用：cycletls 内部对 spawn 失败是在事件回调里 throw
+ * （未捕获异常，会击溃宿主进程），先探后用可完全绕开该缺陷。
  */
 function preflightBinary(): void {
   const bin = PLATFORM_BINARIES[process.platform]?.[process.arch]
@@ -92,6 +95,25 @@ function preflightBinary(): void {
       }
     }
   }
+  // exec 探针：随机端口拉起后由 timeout 收割。出错/秒退在这里同步暴露。
+  const probePort = 20000 + Math.floor(Math.random() * 40000)
+  const r = spawnSync(info.path, [], { env: { WS_PORT: String(probePort) }, timeout: 1500, windowsHide: true })
+  if (r.error) {
+    const code = (r.error as NodeJS.ErrnoException).code || r.error.message
+    throw new Error(
+      `cycletls 二进制无法执行（${code}）：${info.path}。` +
+      (code === 'EPERM' || code === 'EACCES'
+        ? '环境安全策略（容器 seccomp/AppArmor/只读文件系统 noexec/沙箱）阻止执行该二进制，cycletls 在此环境不可用，请改用第三方解析 API 或更换运行环境。'
+        : '请检查文件完整性与权限。')
+    )
+  }
+  if (r.status !== null) {
+    throw new Error(
+      `cycletls 二进制启动即退（exit=${r.status}${r.signal ? ' signal=' + r.signal : ''}）：${info.path}。` +
+      '可能被安全策略击杀或 CPU 不支持其指令集，请改用第三方解析 API 或更换运行环境。'
+    )
+  }
+  // r.status === null 且无 error：被 timeout 正常收割，说明二进制能存活 → 放行
 }
 
 /** 按平台给出对症的排查提示 */
@@ -202,8 +224,31 @@ function checkPortFree(port: number): Promise<'free' | 'occupied'> {
 /**
  * 无 shell 环境的完整自检（供 parse/diag 命令调用）：
  * 逐项输出 cycletls 依赖链每一环的状态，失败环节即根因。
+ *
+ * 全程挂临时 uncaughtException/unhandledRejection 兜底：cycletls 内部会在
+ * 事件回调里 throw（其 spawn 失败处理有缺陷），不兜底会击溃宿主 Koishi 进程。
  */
 export async function diagnoseTls(): Promise<string[]> {
+  const captured: string[] = []
+  const onUncaught = (e: any) => { captured.push(`未捕获异常：${e?.message || e}`) }
+  const onRejection = (r: any) => { captured.push(`未处理拒绝：${r?.message || r}`) }
+  process.on('uncaughtException', onUncaught)
+  process.on('unhandledRejection', onRejection)
+  let lines: string[] = []
+  try {
+    lines = await doDiagnose()
+  } catch (e: any) {
+    lines.push(`诊断流程异常：${e?.message || e}`)
+  } finally {
+    process.off('uncaughtException', onUncaught)
+    process.off('unhandledRejection', onRejection)
+  }
+  for (const c of captured) lines.push(`[!] ${c}`)
+  if (captured.length) lines.push('结论：cycletls 内部抛出了未捕获异常（其 spawn 失败处理的缺陷），以上异常信息即根因。')
+  return lines
+}
+
+async function doDiagnose(): Promise<string[]> {
   const lines: string[] = []
   lines.push(`[0] 平台 ${process.platform}/${process.arch}，Node ${process.versions.node}`)
 
@@ -230,14 +275,27 @@ export async function diagnoseTls(): Promise<string[]> {
   const port = 20000 + Math.floor(Math.random() * 40000)
   let child: ChildProcess | null = null
   let stderr = ''
+  let spawnErr: any = null
   try {
     child = spawn(bin.path, [], {
       env: { WS_PORT: String(port) },
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
     })
+    // 必须监听 error：spawn 异步失败（fork 成功、execve 被拒）以事件送达，
+    // 无监听器的 'error' 事件会直接击溃宿主进程（即"diag 重启 koishi"的元凶）
+    child.on('error', (e) => { spawnErr = e })
+    child.stdout?.on('data', () => {}) // 消费 stdout，防止管道写满阻塞子进程
     child.stderr?.on('data', (d) => { if (stderr.length < 500) stderr += String(d) })
     await new Promise((r) => setTimeout(r, 2000))
+    if (spawnErr) {
+      const code = spawnErr.code || spawnErr.message
+      lines.push(`[3] ✗ 二进制无法执行（${code}）` +
+        (code === 'EPERM' || code === 'EACCES'
+          ? '：环境安全策略（容器 seccomp/AppArmor/noexec 挂载/沙箱）阻止执行该二进制，cycletls 在此环境不可用。'
+          : '：请检查文件完整性与权限。'))
+      return lines
+    }
     if (child.exitCode !== null) {
       lines.push(`[3] ✗ 二进制启动即退（exit=${child.exitCode}${child.signalCode ? ' signal=' + child.signalCode : ''}）` +
         (stderr.trim() ? `，stderr：${stderr.trim().slice(0, 300)}` : '（无输出，可能被安全策略静默击杀或 CPU 不支持指令集）'))
