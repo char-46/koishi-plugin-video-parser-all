@@ -17,6 +17,24 @@ import net from 'net'
 const CHROME_JA3 = '771,4865-4866-4867-49195-49199-49196-49200-52393-52392-49171-49172-156-157-47-53,0-23-65281-10-11-35-16-5-13-18-51-45-43-27-17513,29-23-24,0'
 const CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 const DEFAULT_PORT = 9119
+// musl 静态二进制子包（版本须与 cycletls npm 版本对应）
+const MUSL_PKG = '@char46/cycletls-linux-musl-x64/index'
+
+/**
+ * musl 环境下官方包的 glibc 二进制无法 exec（ENOENT），改用静态子包。
+ * 返回 null 表示不适用（非 musl / 子包未安装）。
+ */
+function resolveMuslExecutable(): string | null {
+  if (process.platform !== 'linux') return null
+  const rt = detectRuntimeLibc()
+  if (rt.libc !== 'musl') return null
+  try {
+    const p = require.resolve(MUSL_PKG)
+    return fs.existsSync(p) ? p : null
+  } catch {
+    return null
+  }
+}
 
 export interface TlsGetOptions {
   headers?: Record<string, string>
@@ -42,8 +60,17 @@ const PLATFORM_BINARIES: Record<string, Record<string, string>> = {
   freebsd: { x64: 'index-freebsd' },
 }
 
-/** 定位 cycletls 二进制；返回 null 表示模块未安装（由调用方报"未安装"） */
-function locateBinary(): { path: string; exists: boolean; size: number; mode: number } | null {
+/** 定位实际使用的 cycletls 二进制（musl 环境优先静态子包）；null = 模块未安装 */
+function locateBinary(): { path: string; exists: boolean; size: number; mode: number; source: 'official' | 'musl-static' } | null {
+  const musl = resolveMuslExecutable()
+  if (musl) {
+    try {
+      const st = fs.statSync(musl)
+      return { path: musl, exists: true, size: st.size, mode: st.mode, source: 'musl-static' }
+    } catch {
+      return { path: musl, exists: false, size: 0, mode: 0, source: 'musl-static' }
+    }
+  }
   const bin = PLATFORM_BINARIES[process.platform]?.[process.arch]
   if (!bin) return null
   let distDir: string
@@ -55,9 +82,9 @@ function locateBinary(): { path: string; exists: boolean; size: number; mode: nu
   const p = path.join(distDir, bin)
   try {
     const st = fs.statSync(p)
-    return { path: p, exists: true, size: st.size, mode: st.mode }
+    return { path: p, exists: true, size: st.size, mode: st.mode, source: 'official' }
   } catch {
-    return { path: p, exists: false, size: 0, mode: 0 }
+    return { path: p, exists: false, size: 0, mode: 0, source: 'official' }
   }
 }
 
@@ -100,6 +127,8 @@ function preflightBinary(): void {
   const r = spawnSync(info.path, [], { env: { WS_PORT: String(probePort) }, timeout: 1500, windowsHide: true })
   if (r.error) {
     const code = (r.error as NodeJS.ErrnoException).code || r.error.message
+    // musl 环境下官方 glibc 二进制的 ENOENT 已由子包方案规避；走到这里说明
+    // 子包二进制也失败（或 glibc 环境异常），提示按来源对症处理
     throw new Error(`cycletls 二进制无法执行（${code}）：${info.path}。${explainSpawnError(String(code), info.path)}`)
   }
   if (r.status !== null) {
@@ -152,8 +181,9 @@ async function getClient(): Promise<any> {
         throw new Error('TLS 指纹模拟库 cycletls 未安装（可选依赖）。解析需登录的 X 推文需要它：npm i cycletls')
       }
       preflightBinary()
+      const muslPath = resolveMuslExecutable()
       try {
-        const c = await init({ port: nextPort })
+        const c = await init({ port: nextPort, executablePath: muslPath || undefined })
         nextPort = DEFAULT_PORT
         return c
       } catch (e: any) {
@@ -334,7 +364,7 @@ async function doDiagnose(): Promise<string[]> {
     lines.push(`[1] ✗ 二进制缺失：${bin.path}（npm i cycletls --force 重装）`)
     return lines
   }
-  lines.push(`[1] ✓ 二进制存在：${bin.path}（${(bin.size / 1048576).toFixed(1)}MB，权限 ${(bin.mode & 0o777).toString(8)}）`)
+  lines.push(`[1] ✓ 二进制存在：${bin.path}（${(bin.size / 1048576).toFixed(1)}MB，权限 ${(bin.mode & 0o777).toString(8)}，来源：${bin.source === 'musl-static' ? 'musl 静态子包' : '官方包'}）`)
   if (bin.size < 1024 * 1024) lines.push('[1] ⚠ 体积异常偏小，疑似损坏，建议重装')
   if (process.platform !== 'win32') {
     const ei = checkElfInterp(bin.path)
@@ -394,11 +424,11 @@ async function doDiagnose(): Promise<string[]> {
   // 默认端口 9119 占用情况
   lines.push(`[4] 端口 9119：${await checkPortFree(9119) === 'free' ? '空闲 ✓' : '已被占用 ⚠（若是其他实例的 cycletls 属正常共享；否则会抢答握手导致初始化超时）'}`)
 
-  // 完整初始化（随机端口，避开可能被污染的 9119）
+  // 完整初始化（随机端口，避开可能被污染的 9119；musl 环境注入子包二进制）
   try {
     const mod = await import('cycletls')
     const init = (mod as any).default || mod
-    const c = await init({ port: 30000 + Math.floor(Math.random() * 20000), timeout: 15000 })
+    const c = await init({ port: 30000 + Math.floor(Math.random() * 20000), timeout: 15000, executablePath: resolveMuslExecutable() || undefined })
     lines.push('[5] ✓ initCycleTLS 完整初始化成功')
     try { await c.exit() } catch {}
     lines.push('结论：环境正常。若解析仍报初始化失败，多半是 9119 被非 cycletls 进程占用（见 [4]）。')

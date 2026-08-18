@@ -1,7 +1,7 @@
 {
   "name": "@char46/koishi-plugin-video-parser-all",
   "description": "Koishi 全平台视频/图集解析插件，支持抖音/快手/B站/微博/小红书/YouTube/TikTok等20+平台",
-  "version": "1.7.3",
+  "version": "1.8.0",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "bin": {
@@ -100,7 +100,8 @@
     "vitest": "^4.1.10"
   },
   "optionalDependencies": {
-    "cycletls": "^2.0.5"
+    "cycletls": "^2.0.5",
+    "@char46/cycletls-linux-musl-x64": "2.0.5"
   },
   "dependencies": {
     "axios": "^1.16.1"

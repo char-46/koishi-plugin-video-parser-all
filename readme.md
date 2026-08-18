@@ -29,7 +29,7 @@ This is a **multi-platform video/image parsing plugin** developed for the Koishi
    npm i cycletls
    ```
    X 的 GraphQL 端点受 Cloudflare TLS 指纹校验保护，Node 原生 TLS 握手会被直接 403；cycletls（Go 二进制）可模拟 Chrome 指纹
-3. **环境要求**：允许派生子进程（部分容器/PaaS 禁止）。遇到初始化失败时发送 `parse/diag`，会在聊天中输出逐项自检结果（二进制状态、ELF 链接与解释器、spawn 权限、端口占用、完整初始化）。诊断命令可在配置 `enableDiagCommand` 中关闭
+3. **环境要求**：允许派生子进程（部分容器/PaaS 禁止）。Alpine/musl 环境（官方 glibc 二进制无法运行）会自动改用静态构建的 `@char46/cycletls-linux-musl-x64`（本插件的可选依赖，自动安装、自动调度）。遇到初始化失败时发送 `parse/diag`，会在聊天中输出逐项自检结果（二进制状态与来源、ELF 链接与解释器、spawn 权限、端口占用、完整初始化）。诊断命令可在配置 `enableDiagCommand` 中关闭
 
 Public tweets use the syndication API with zero config. **Login-required tweets** need credentials (`auth_token` + `ct0` cookies) and the optional dependency `cycletls` (Chrome TLS fingerprint impersonation to bypass Cloudflare). Run `parse/diag` in chat to troubleshoot without shell access.
 
