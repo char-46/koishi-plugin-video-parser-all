@@ -507,7 +507,7 @@ function extractAllUrlsFromMessage(session: any, customRules: { pattern: RegExp;
 }
 
 function formatDuration(seconds: number): string {
-  if (!seconds || seconds <= 0) return ''
+  if (!seconds || !Number.isFinite(seconds) || seconds <= 0) return ''
   const h = Math.floor(seconds / 3600)
   const m = Math.floor((seconds % 3600) / 60)
   const s = Math.floor(seconds % 60)
@@ -549,7 +549,8 @@ function getNestedValue(obj: any, path: string): any {
 function parseCount(val: any): number {
   if (val === undefined || val === null) return 0
   if (typeof val === 'number') return val
-  const str = String(val).trim()
+  const str = String(val).trim().replace(/,/g, '')
+  if (!str) return 0
   if (str.includes('万')) {
     const num = parseFloat(str)
     return isNaN(num) ? 0 : Math.round(num * 10000)
@@ -589,19 +590,21 @@ function parseApiResponse(raw: any, maxDescLen: number, fieldMapping?: Record<st
   let authorObj = mapField('author', () => data.author || data.user)
   let author = '', uid = '', avatar = ''
   if (authorObj && typeof authorObj === 'object') {
-    author = authorObj.name || authorObj.author || ''
+    author = String(authorObj.name || authorObj.author || '')
     uid = String(authorObj.id || authorObj.userID || data.uid || data.userID || data.author_id || '')
-    avatar = authorObj.avatar || data.avatar || ''
+    avatar = String(authorObj.avatar || data.avatar || '')
   } else {
-    author = mapField('author', () => data.author || data.auther || '')
-    uid = String(mapField('uid', () => data.uid || data.userID || data.author_id || ''))
-    avatar = mapField('avatar', () => data.avatar || '')
+    author = String(mapField('author', () => data.author || data.auther || '') ?? '')
+    uid = String(mapField('uid', () => data.uid || data.userID || data.author_id || '') ?? '')
+    avatar = String(mapField('avatar', () => data.avatar || '') ?? '')
   }
 
-  let title = mapField('title', () => data.title || '')
-  let desc = (mapField('desc', () => data.desc || data.description || '') as string).slice(0, maxDescLen).trim()
+  let title = String(mapField('title', () => data.title || '') ?? '')
+  let desc = String(mapField('desc', () => data.desc || data.description || '') ?? '').slice(0, maxDescLen).trim()
   const coverRaw = mapField('cover', () => data.cover || '')
-  const cover = coverRaw ? (String(coverRaw).startsWith('http') ? String(coverRaw) : 'https:' + coverRaw) : ''
+  const cover = typeof coverRaw === 'string' && coverRaw
+    ? (coverRaw.startsWith('http') ? coverRaw : 'https:' + coverRaw)
+    : ''
 
   let video = ''
   let videos: VideoQuality[] = []
@@ -627,7 +630,11 @@ function parseApiResponse(raw: any, maxDescLen: number, fieldMapping?: Record<st
     if (videos.length) video = videos[0].url
   }
   if (!video) video = mapField('video', () => data.url || '')
-  if (video && !video.startsWith('http')) video = 'https:' + video
+  if (typeof video === 'string' && video && !video.startsWith('http')) {
+    video = 'https:' + video
+  } else if (typeof video !== 'string') {
+    video = ''
+  }
 
   let images: string[] = []
   const directImages = mapField('images', () => data.images)
@@ -646,10 +653,16 @@ function parseApiResponse(raw: any, maxDescLen: number, fieldMapping?: Record<st
     images = data.imgurl.map(normalizeImage).filter((url: string | null): url is string => !!url)
   }
 
-  const live_photo = Array.isArray(data.live_photo) ? data.live_photo.filter((lp: any) => lp && lp.image).map((lp: any) => ({
-    image: lp.image.startsWith('http') ? lp.image : 'https:' + lp.image,
-    video: lp.video ? (lp.video.startsWith('http') ? lp.video : 'https:' + lp.video) : ''
-  })) : []
+  const live_photo = Array.isArray(data.live_photo)
+    ? data.live_photo
+        .filter((lp: any) => lp && lp.image)
+        .map((lp: any) => ({
+          image: String(lp.image).startsWith('http') ? String(lp.image) : 'https:' + String(lp.image),
+          video: lp.video
+            ? (String(lp.video).startsWith('http') ? String(lp.video) : 'https:' + String(lp.video))
+            : ''
+        }))
+    : []
 
   if (type === 'live' && live_photo.length > 0 && !data.live) {
     type = 'live_photo'
@@ -658,10 +671,14 @@ function parseApiResponse(raw: any, maxDescLen: number, fieldMapping?: Record<st
   const musicCoverRaw = mapField('music_cover', () => data.music?.cover || data.music?.albumCover?.url || '')
   const musicUrlRaw = mapField('music_url', () => data.music?.url || data.music?.playURL || '')
   const music = {
-    title: mapField('music_title', () => data.music?.title || data.music?.name || '') as string,
-    author: mapField('music_author', () => data.music?.author || data.music?.artist || '') as string,
-    cover: musicCoverRaw ? (String(musicCoverRaw).startsWith('http') ? String(musicCoverRaw) : 'https:' + musicCoverRaw) : '',
-    url: musicUrlRaw ? (String(musicUrlRaw).startsWith('http') ? String(musicUrlRaw) : 'https:' + musicUrlRaw) : '',
+    title: String(mapField('music_title', () => data.music?.title || data.music?.name || '') ?? ''),
+    author: String(mapField('music_author', () => data.music?.author || data.music?.artist || '') ?? ''),
+    cover: typeof musicCoverRaw === 'string' && musicCoverRaw
+      ? (musicCoverRaw.startsWith('http') ? musicCoverRaw : 'https:' + musicCoverRaw)
+      : '',
+    url: typeof musicUrlRaw === 'string' && musicUrlRaw
+      ? (musicUrlRaw.startsWith('http') ? musicUrlRaw : 'https:' + musicUrlRaw)
+      : '',
   }
 
   const like = parseCount(mapField('like', () => data.like ?? data.statistics?.digg_count ?? data.statistics?.like_count ?? data.statistics?.likes ?? extra.statistics?.digg_count ?? extra.statistics?.like_count ?? extra.statistics?.likes ?? data.attitudes_count ?? 0))
@@ -690,7 +707,7 @@ function parseApiResponse(raw: any, maxDescLen: number, fieldMapping?: Record<st
   }
 
   const author_followers = parseCount(mapField('author_followers', () => extra.author_extra?.follower_count ?? data.author_extra?.follower_count ?? 0))
-  const author_signature = String(mapField('author_signature', () => extra.author_extra?.signature ?? data.author_extra?.signature ?? ''))
+  const author_signature = String(mapField('author_signature', () => extra.author_extra?.signature ?? data.author_extra?.signature ?? '') ?? '')
   const admire = parseCount(mapField('admire', () => extra.statistics?.admire_count ?? data.statistics?.admire_count ?? 0))
 
   title = title.replace(/\[话题\]/g, '')
@@ -881,16 +898,23 @@ export function apply(ctx: Context, config: any) {
     const retryDelay = config.retryInterval || 1000
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        let sendPromise = session.send(content)
+        const sendPromise = session.send(content)
         if (config.videoSendTimeout > 0) {
-          const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('发送超时')), config.videoSendTimeout))
-          return await Promise.race([sendPromise, timeoutPromise])
+          let timer: NodeJS.Timeout | undefined
+          const timeoutPromise = new Promise((_, reject) => {
+            timer = setTimeout(() => reject(new Error('发送超时')), config.videoSendTimeout)
+          })
+          try {
+            return await Promise.race([sendPromise, timeoutPromise])
+          } finally {
+            if (timer) clearTimeout(timer)
+          }
         } else {
           return await sendPromise
         }
       } catch (err) {
         const errMsg = getErrorMessage(err)
-        debugLog('ERROR', `发送失败尝试 ${attempt+1}: ${errMsg}`)
+        debugLog('ERROR', `发送失败尝试 ${attempt + 1}: ${errMsg}`)
         if (attempt < maxRetries) await delay(retryDelay)
         else if (!config.ignoreSendError) throw err
       }
@@ -918,10 +942,11 @@ export function apply(ctx: Context, config: any) {
 
   async function flush(session: any, matches: LinkMatch[]) {
     debugLog('INFO', `开始解析 ${matches.length} 个链接`)
-    const items: { text: string; parsed: ParsedData }[] = []
-    const errors: string[] = []
+    const items: { text: string; parsed: ParsedData; index: number }[] = []
+    const errors: { item: string; index: number }[] = []
     const limiter = new ConcurrencyLimiter(config.maxConcurrent || 3)
-    const promises = matches.map(async (match) => {
+
+    const promises = matches.map(async (match, index) => {
       await limiter.acquire()
       try {
         const platformEnabled = config.platformEnabled?.[match.type] ?? true
@@ -929,84 +954,122 @@ export function apply(ctx: Context, config: any) {
           debugLog('INFO', `平台 ${match.type} 已禁用，跳过链接: ${match.url}`)
           return
         }
+
         if (config.enableDeduplication !== false && config.deduplicationInterval > 0) {
           const lastTime = dedupCache.get(match.url)
-          if (lastTime && (Date.now() - lastTime < config.deduplicationInterval * 1000)) {
+          if (lastTime && Date.now() - lastTime < config.deduplicationInterval * 1000) {
             debugLog('INFO', `跳过重复链接: ${match.url}`)
             const shortUrl = match.url.length > 80 ? match.url.slice(0, 80) + '...' : match.url
-            const tip = getText('deduplicationTipText').replace(/\$\{url\}/g, shortUrl).replace(/\$\{interval\}/g, String(config.deduplicationInterval))
+            const tip = getText('deduplicationTipText')
+              .replace(/\$\{url\}/g, shortUrl)
+              .replace(/\$\{interval\}/g, String(config.deduplicationInterval))
             await sendWithTimeout(session, tip).catch(() => {})
             return
           }
         }
+
         debugLog('INFO', `解析链接: ${match.url} (${match.type})`)
         const platformConf = getPlatformConfig(match.type)
         const fieldMapping = platformConf.fieldMapping
         const result = await processSingleUrl(match.url, match.type, fieldMapping, platformConf)
+
         if (result.success) {
           if (config.enableDeduplication !== false && config.deduplicationInterval > 0) {
             const fp = contentFingerprint(result.data.parsed)
             const lastDedup = contentDedupCache.get(fp)
-            if (lastDedup && (Date.now() - lastDedup < config.deduplicationInterval * 1000)) {
+            if (lastDedup && Date.now() - lastDedup < config.deduplicationInterval * 1000) {
               debugLog('INFO', `跳过重复内容: ${match.url}`)
               return
             }
             contentDedupCache.set(fp, Date.now())
             dedupCache.set(match.url, Date.now())
           }
-          items.push(result.data)
+          items.push({ ...result.data, index })
         } else {
           const displayUrl = match.url.length > 80 ? match.url.slice(0, 80) + '...' : match.url
-          const item = getText('parseErrorItemFormat').replace(/\$\{url\}/g, displayUrl).replace(/\$\{msg\}/g, result.msg)
-          errors.push(item)
+          const item = getText('parseErrorItemFormat')
+            .replace(/\$\{url\}/g, displayUrl)
+            .replace(/\$\{msg\}/g, result.msg)
+          errors.push({ item, index })
         }
       } finally {
         limiter.release()
       }
     })
+
     await Promise.all(promises)
 
-    if (errors.length) await sendWithTimeout(session, `${getText('parseErrorPrefix')}\n${errors.join('\n')}`)
-    if (!items.length) return
+    items.sort((a, b) => a.index - b.index)
+    errors.sort((a, b) => a.index - b.index)
+    const orderedItems = items.map(({ index, ...data }) => data)
+    const orderedErrors = errors.map(e => e.item)
 
-    const totalItems = items.length
+    if (orderedErrors.length) {
+      await sendWithTimeout(session, `${getText('parseErrorPrefix')}\n${orderedErrors.join('\n')}`)
+    }
+    if (!orderedItems.length) return
+
+    const totalItems = orderedItems.length
     const enableForward = config.enableForward && (session.platform === 'onebot' || session.platform === 'satori')
     const botName = config.botName || '视频解析机器人'
+
     if (enableForward) {
       const forwardMessages: any[] = []
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i]
+      for (let i = 0; i < orderedItems.length; i++) {
+        const item = orderedItems[i]
         const p = item.parsed
-        const textWithIndex = (totalItems > 1) ? `【${i + 1}/${totalItems}】\n${item.text}` : item.text
+        const textWithIndex = totalItems > 1 ? `【${i + 1}/${totalItems}】\n${item.text}` : item.text
         let text = textWithIndex
+
         if (config.showAuthorAvatar && p.avatar && config.showAuthorAvatarText) {
           text = text ? text + '\n' + (config.authorAvatarText || '作者头像：') : (config.authorAvatarText || '作者头像：')
         }
         if (text && config.showImageText) {
           forwardMessages.push(buildForwardNode(session, text, botName))
         }
+
         if (config.showAuthorAvatar && p.avatar) {
-          forwardMessages.push(buildForwardNode(session, h.image(p.avatar), botName))
+          if (config.showAuthorAvatarFile) {
+            forwardMessages.push(buildForwardNode(session, h.image(p.avatar), botName))
+          } else {
+            forwardMessages.push(buildForwardNode(session, `作者头像链接：${p.avatar}`, botName))
+          }
         }
+
         if (p.cover && config.showCoverImage && p.type !== 'live_photo' && p.type !== 'image' && p.type !== 'live') {
           if (config.showCoverText) {
             forwardMessages.push(buildForwardNode(session, config.coverText || '封面：', botName))
           }
-          forwardMessages.push(buildForwardNode(session, h.image(p.cover), botName))
+          if (config.showCoverFile) {
+            forwardMessages.push(buildForwardNode(session, h.image(p.cover), botName))
+          } else {
+            forwardMessages.push(buildForwardNode(session, `封面链接：${p.cover}`, botName))
+          }
         }
+
         if (config.showMusicCover && p.music.cover) {
           forwardMessages.push(buildForwardNode(session, h.image(p.music.cover), botName))
         }
+
         if (p.type === 'live_photo' && p.live_photo?.length) {
           for (const lp of p.live_photo) {
-            forwardMessages.push(buildForwardNode(session, h.image(lp.image), botName))
+            if (config.showImageFileNew) {
+              forwardMessages.push(buildForwardNode(session, h.image(lp.image), botName))
+            } else {
+              forwardMessages.push(buildForwardNode(session, `图片链接：${lp.image}`, botName))
+            }
           }
         } else if (p.type === 'image' || (p.type === 'live' && (p.live_photo?.length || p.images?.length))) {
           const imageUrls = p.images?.length ? p.images : (p.live_photo?.map(lp => lp.image) ?? [])
           for (const imgUrl of imageUrls) {
-            forwardMessages.push(buildForwardNode(session, h.image(imgUrl), botName))
+            if (config.showImageFileNew) {
+              forwardMessages.push(buildForwardNode(session, h.image(imgUrl), botName))
+            } else {
+              forwardMessages.push(buildForwardNode(session, `图片链接：${imgUrl}`, botName))
+            }
           }
         }
+
         if (p.video && p.type !== 'live' && p.type !== 'live_photo') {
           if (config.showVideoFile) {
             forwardMessages.push(buildForwardNode(session, h.video(p.video), botName))
@@ -1014,8 +1077,13 @@ export function apply(ctx: Context, config: any) {
             forwardMessages.push(buildForwardNode(session, `视频链接：${p.video}`, botName))
           }
         }
+
         if (config.showMusicVoice && p.music.url) {
-          forwardMessages.push(buildForwardNode(session, h.audio(p.music.url), botName))
+          if (config.showMusicVoiceFile) {
+            forwardMessages.push(buildForwardNode(session, h.audio(p.music.url), botName))
+          } else {
+            forwardMessages.push(buildForwardNode(session, `音乐链接：${p.music.url}`, botName))
+          }
         }
       }
 
@@ -1027,21 +1095,32 @@ export function apply(ctx: Context, config: any) {
         } catch (err) {
           debugLog('ERROR', '合并转发失败，降级逐条发送:', err)
           for (const node of batch) {
-            await sendWithTimeout(session, node.data.content).catch(() => {})
+            const content = node.data.content
+            if (Array.isArray(content)) {
+              for (const c of content) {
+                await sendWithTimeout(session, c).catch(() => {})
+                await delay(200)
+              }
+            } else {
+              await sendWithTimeout(session, content).catch(() => {})
+            }
             await delay(300)
           }
         }
       }
     } else {
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i]
+      for (let i = 0; i < orderedItems.length; i++) {
+        const item = orderedItems[i]
         const p = item.parsed
-        const textWithIndex = (totalItems > 1) ? `【${i + 1}/${totalItems}】\n${item.text}` : item.text
+        const textWithIndex = totalItems > 1 ? `【${i + 1}/${totalItems}】\n${item.text}` : item.text
         let text = textWithIndex
         if (config.showAuthorAvatar && p.avatar && config.showAuthorAvatarText) {
           text = text ? text + '\n' + (config.authorAvatarText || '作者头像：') : (config.authorAvatarText || '作者头像：')
         }
-        if (text && config.showImageText) { await sendWithTimeout(session, text); await delay(300) }
+        if (text && config.showImageText) {
+          await sendWithTimeout(session, text)
+          await delay(300)
+        }
         if (config.showAuthorAvatar && p.avatar) {
           await sendMedia(session, p.avatar, 'image', config.showAuthorAvatarFile).catch(() => {})
           await delay(300)
@@ -1063,7 +1142,7 @@ export function apply(ctx: Context, config: any) {
         } else if (p.type === 'image' || (p.type === 'live' && (p.live_photo?.length || p.images?.length))) {
           const imageUrls = p.images?.length ? p.images : (p.live_photo?.map(lp => lp.image) ?? [])
           for (let j = 0; j < imageUrls.length; j++) {
-            logger.info(`[发送] 图片 ${j+1}/${imageUrls.length}`)
+            logger.info(`[发送] 图片 ${j + 1}/${imageUrls.length}`)
             await sendMedia(session, imageUrls[j], 'image', config.showImageFileNew).catch(() => {})
             await delay(1000)
           }
@@ -1135,7 +1214,7 @@ export function apply(ctx: Context, config: any) {
             } : undefined
           }
           const res = await http.get(api.url, axiosConfigLocal)
-          if (res.data && (res.data.code === 200 || res.data.code === 0)) {
+          if (res.data && (res.data.code == 200 || res.data.code == 0)) {
             const parsed = parseApiResponse(res.data, config.maxDescLength, api.fieldMapping)
             urlCacheLocal.set(cacheKey, { data: parsed, expire: Date.now() + cacheTTL })
             return parsed
@@ -1143,7 +1222,7 @@ export function apply(ctx: Context, config: any) {
           throw new Error(res.data?.msg || `API返回错误码: ${res.data?.code}`)
         } catch (error) {
           lastError = error instanceof Error ? error : new Error(String(error))
-          debugLog('ERROR', `${api.label} attempt ${attempt+1} failed: ${lastError.message}`)
+          debugLog('ERROR', `${api.label} attempt ${attempt + 1} failed: ${lastError.message}`)
           if (axios.isAxiosError(error)) {
             if (!error.response) {
               if (attempt < config.retryTimes) { await delay(config.retryInterval); continue }
