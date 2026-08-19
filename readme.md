@@ -1,5 +1,8 @@
 # koishi-plugin-video-parser-all
 
+## 📌 重要公告
+请务必阅读：[迁移说明 #12](https://github.com/Minecraft-1314/koishi-plugin-video-parser-all/issues/12)
+
 ## 项目介绍 (Project Introduction)
 
 ### 中文
