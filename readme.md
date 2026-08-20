@@ -11,6 +11,22 @@
 ### English
 This is a **multi-platform video/image parsing plugin** developed for the Koishi bot framework, using a unified API interface to automatically recognize and parse short video/image/live photo links from **20+ mainstream platforms** such as Douyin, Kuaishou, Bilibili, Xiaohongshu, Weibo, Xigua, YouTube, TikTok, AcFun, Zhihu, Weishi, Huya, Haokan, Meipai, Twitter/X, Instagram, Doubao (video/images), **Jimeng (AI video/image)**, Oasis, WeChat Channels, Lishi, Quanmin, Pipigx, Pipixia, Zuiyou and more.
 
+## 版本方案 (Versioning)
+
+本包是 [Minecraft-1314/koishi-plugin-video-parser-all](https://github.com/Minecraft-1314/koishi-plugin-video-parser-all) 的 fork，采用**独立 semver + build metadata 标注上游基线**：
+
+- **核心版本**（`MAJOR.MINOR.PATCH`）：本 fork 自己的语义化版本，描述 fork 自身的变更（重构、新功能、修复）。升级链永远单调递增，不受上游版本号影响
+- **build 段**（`+upstream.X.Y.Z`）：所跟随的上游基线版本，仅作标识、**不参与 semver 比较**。同步上游新版本时更新此段
+- 同步上游时的规则：合并上游 `X.Y.Z` 后，fork 核心版本 = `max(自身当前, 上游)` 基础上 minor+1，并更新 build 段；永不回退、永不重号
+
+| fork 版本 | 上游基线 | 说明 |
+|---|---|---|
+| 1.5.8 → 1.9.0 | 1.5.8 | 引入版本方案前的演化线 |
+| ~~1.6.2-1~~ | 1.6.2 | 已弃用（semver 预发布格式导致降级问题） |
+| 1.10.0+upstream.1.6.2 | 1.6.2 | 双网关条件切换（apiKey → api-new.ifphp.com） |
+
+This package is a fork with **independent semver + upstream baseline in build metadata**: the core version tracks fork-only changes (always monotonically increasing), while the `+upstream.X.Y.Z` build segment marks the upstream base it follows (not part of semver comparison).
+
 ## 项目仓库 (Repository)
 - GitHub: `https://github.com/char-46/koishi-plugin-video-parser-all`
 - Issues: `https://github.com/char-46/koishi-plugin-video-parser-all/issues`
