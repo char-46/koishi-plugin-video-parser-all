@@ -1,5 +1,5 @@
 import type { ParserRuntime } from '../runtime'
-import { defaultDedicatedApis } from './dedicated-apis'
+import { defaultDedicatedApisLegacy, defaultDedicatedApisNew } from './dedicated-apis'
 import { parseFieldMapping } from '../utils/field-mapping'
 
 export function buildCustomLinkRules(customPlatforms: any[]): { pattern: RegExp; type: string }[] {
@@ -43,10 +43,12 @@ export function getPlatformConfig(rt: ParserRuntime, type: string): { apiUrl: st
     return { apiUrl: null, dedicatedFirst: false, apiKey: '', authHeaderType: 'Bearer', customHeaderName: 'X-API-Key' }
   }
 
+  // 网关选择（上游 issue #12）：配置 apiKey → 新网关；否则 → 旧网关
+  const useNewGateway = !!config.apiKey
   const custom = config.customApis?.find((item: any) => item.platform === type)
-  let apiUrl = defaultDedicatedApis[type] || null
+  let apiUrl = (useNewGateway ? defaultDedicatedApisNew[type] : defaultDedicatedApisLegacy[type]) || null
   let apiKey = ''
-  let authHeaderType = 'Bearer'
+  let authHeaderType = 'X-API-Key'
   let customHeaderName = 'X-API-Key'
   let fieldMapping: Record<string, string> | undefined = undefined
   if (custom && custom.apiUrl) {
@@ -55,8 +57,9 @@ export function getPlatformConfig(rt: ParserRuntime, type: string): { apiUrl: st
     authHeaderType = custom.authHeaderType || 'Bearer'
     customHeaderName = custom.customHeaderName || 'X-API-Key'
     fieldMapping = parseFieldMapping(custom.fieldMapping)
-  } else {
-    apiKey = ''
+  } else if (useNewGateway) {
+    apiKey = config.apiKey
+    authHeaderType = 'X-API-Key'
   }
   const dedicatedFirst = config.platformDedicatedFirst?.[type] ?? false
   if (!fieldMapping) {

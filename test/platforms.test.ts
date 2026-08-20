@@ -68,3 +68,36 @@ describe('getPlatformConfig', () => {
     expect(getPlatformConfig(rt, 'toutiao').apiUrl).toBe('https://api.bugpk.com/api/toutiao')
   })
 })
+
+describe('网关选择（上游 issue #12：配置 apiKey → 新网关，否则旧网关）', () => {
+  it('未配置 apiKey：旧网关专属端点，无 Key', () => {
+    const rt = makeRuntime({ config: { globalFieldMapping: '{}' } })
+    const c = getPlatformConfig(rt, 'douyin')
+    expect(c.apiUrl).toBe('https://api.bugpk.com/api/douyin')
+    expect(c.apiKey).toBe('')
+  })
+
+  it('配置 apiKey：新网关专属端点 + X-API-Key', () => {
+    const rt = makeRuntime({ config: { apiKey: 'mykey', globalFieldMapping: '{}' } })
+    const c = getPlatformConfig(rt, 'douyin')
+    expect(c.apiUrl).toBe('https://api-new.ifphp.com/api/dyjx')
+    expect(c.apiKey).toBe('mykey')
+    expect(c.authHeaderType).toBe('X-API-Key')
+  })
+
+  it('新网关未覆盖的平台（如 toutiao）无专属端点，走主 API 兜底', () => {
+    const rt = makeRuntime({ config: { apiKey: 'mykey', globalFieldMapping: '{}' } })
+    expect(getPlatformConfig(rt, 'toutiao').apiUrl).toBeNull()
+  })
+
+  it('customApis 覆盖优先于网关选择', () => {
+    const rt = makeRuntime({ config: {
+      apiKey: 'mykey',
+      customApis: [{ platform: 'douyin', apiUrl: 'https://my.api/douyin', apiKey: 'sek' }],
+      globalFieldMapping: '{}',
+    } })
+    const c = getPlatformConfig(rt, 'douyin')
+    expect(c.apiUrl).toBe('https://my.api/douyin')
+    expect(c.apiKey).toBe('sek')
+  })
+})

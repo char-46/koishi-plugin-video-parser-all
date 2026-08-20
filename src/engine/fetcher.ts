@@ -7,6 +7,7 @@ import { generateFormattedText } from '../utils/format'
 import { parseApiResponse } from './parser'
 import { getPlatformConfig, buildAuthHeaders } from '../platforms/custom'
 import { parseTwitter } from '../platforms/twitter'
+import { NEW_GATEWAY_PRIMARY, LEGACY_GATEWAY_PRIMARY, LEGACY_GATEWAY_BACKUP } from '../platforms/dedicated-apis'
 
 export async function fetchApi(rt: ParserRuntime, url: string, type: string, fieldMapping?: Record<string, string>, platformConf?: any): Promise<ParsedData> {
   const { config, http, urlCacheLocal, proxyConfig, cacheTTL } = rt
@@ -16,7 +17,7 @@ export async function fetchApi(rt: ParserRuntime, url: string, type: string, fie
 
   const { apiUrl: dedicatedUrl, dedicatedFirst, apiKey, authHeaderType, customHeaderName, customProxy } = platformConf || getPlatformConfig(rt, type)
 
-  // X / Twitter：bugpk 统一 API 不支持，走原生 syndication 解析（除非用户自定义了 API）
+  // X / Twitter：统一网关均走原生 syndication 解析（除非用户自定义了 API）
   if (type === 'twitter' && !dedicatedUrl) {
     debugLog('INFO', 'twitter 走原生 syndication 解析:', url)
     const twCreds = (config.twitterAuthToken && config.twitterCt0)
@@ -27,18 +28,26 @@ export async function fetchApi(rt: ParserRuntime, url: string, type: string, fie
     return parsed
   }
 
-  const primaryApi = config.primaryApiUrl || 'https://api.bugpk.com/api/short_videos'
-  const backupApi = config.backupApiUrl || 'https://api.bugpk.com/api/svparse'
-  const backupAllowed = new Set(['douyin', 'xiaohongshu', 'instagram', 'jimeng']).has(type)
+  // 网关选择（上游 issue #12）：配置 apiKey → 新网关（无备用 API）；否则 → 旧网关（主+备用）。
+  // 注意：primaryApiUrl 是旧网关覆盖字段，新网关不受其影响（避免旧配置劫持切换）
+  const useNewGateway = !!config.apiKey
+  const primaryApi = useNewGateway
+    ? NEW_GATEWAY_PRIMARY
+    : (config.primaryApiUrl || LEGACY_GATEWAY_PRIMARY)
+  const backupApi = config.backupApiUrl || LEGACY_GATEWAY_BACKUP
+  const backupAllowed = !useNewGateway && new Set(['douyin', 'xiaohongshu', 'instagram', 'jimeng']).has(type)
+  const gwConf = useNewGateway
+    ? { apiKey: config.apiKey, authHeaderType: 'X-API-Key' as const, customHeaderName: 'X-API-Key' }
+    : { apiKey: '', authHeaderType: undefined, customHeaderName: undefined }
 
   const apiList: ApiItem[] = []
   if (dedicatedFirst && dedicatedUrl) {
     apiList.push({ url: dedicatedUrl, label: `专属API(${type})`, apiKey, authHeaderType, customHeaderName, fieldMapping })
-    apiList.push({ url: primaryApi, label: '默认主API', fieldMapping })
-    if (backupAllowed) apiList.push({ url: backupApi, label: '备用主API', fieldMapping })
+    apiList.push({ url: primaryApi, label: '默认主API', ...gwConf, fieldMapping })
+    if (backupAllowed) apiList.push({ url: backupApi, label: '备用主API', ...gwConf, fieldMapping })
   } else {
-    apiList.push({ url: primaryApi, label: '默认主API', fieldMapping })
-    if (backupAllowed) apiList.push({ url: backupApi, label: '备用主API', fieldMapping })
+    apiList.push({ url: primaryApi, label: '默认主API', ...gwConf, fieldMapping })
+    if (backupAllowed) apiList.push({ url: backupApi, label: '备用主API', ...gwConf, fieldMapping })
     if (dedicatedUrl) apiList.push({ url: dedicatedUrl, label: `专属API(${type})`, apiKey, authHeaderType, customHeaderName, fieldMapping })
   }
 

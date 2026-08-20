@@ -116,4 +116,38 @@ describe('flush 端到端（mock session + mock http，无需 Koishi bot）', ()
     await flush(rt, session as any, [{ type: 'douyin', url: 'https://v.douyin.com/E/', id: 'E' }])
     expect(session._sent).toHaveLength(0)
   })
+
+  it('网关选择：未配置 apiKey 走旧网关且无认证头', async () => {
+    const seen: any[] = []
+    const rt = makeRuntime({
+      config: { globalFieldMapping: '{}' },
+      http: {
+        get: async (url: string, cfg: any) => {
+          seen.push({ url, headers: cfg?.headers })
+          return { data: { code: 200, data: { title: '旧网关', url: 'https://x/v.mp4' } } }
+        },
+      },
+    })
+    const session = mockSession()
+    await flush(rt, session as any, [{ type: 'douyin', url: 'https://v.douyin.com/G1/', id: 'G1' }])
+    expect(seen[0].url).toBe('https://api.bugpk.com/api/short_videos')
+    expect(seen[0].headers['X-API-Key']).toBeUndefined()
+  })
+
+  it('网关选择：配置 apiKey 走新网关并携带 X-API-Key', async () => {
+    const seen: any[] = []
+    const rt = makeRuntime({
+      config: { apiKey: 'k123', globalFieldMapping: '{}' },
+      http: {
+        get: async (url: string, cfg: any) => {
+          seen.push({ url, headers: cfg?.headers })
+          return { data: { code: 200, data: { title: '新网关', url: 'https://x/v.mp4' } } }
+        },
+      },
+    })
+    const session = mockSession()
+    await flush(rt, session as any, [{ type: 'douyin', url: 'https://v.douyin.com/G2/', id: 'G2' }])
+    expect(seen[0].url).toBe('https://api-new.ifphp.com/api/svparse')
+    expect(seen[0].headers['X-API-Key']).toBe('k123')
+  })
 })

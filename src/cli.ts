@@ -35,6 +35,7 @@ interface CliArgs {
   info: boolean
   debug: boolean
   api: string | undefined
+  apiKey: string | undefined
   proxy: string | undefined
   dedicatedFirst: boolean
   twitterAuthToken: string | undefined
@@ -44,7 +45,7 @@ interface CliArgs {
 function parseArgs(argv: string[]): CliArgs {
   const args: CliArgs = {
     url: '', download: false, output: '.', json: false, info: false, debug: false,
-    api: undefined, proxy: undefined, dedicatedFirst: false,
+    api: undefined, apiKey: undefined, proxy: undefined, dedicatedFirst: false,
     twitterAuthToken: undefined, twitterCt0: undefined,
   }
   const positional: string[] = []
@@ -57,6 +58,7 @@ function parseArgs(argv: string[]): CliArgs {
       case '--debug': args.debug = true; break
       case '-o': case '--output': args.output = argv[++i]; break
       case '--api': args.api = argv[++i]; break
+      case '--api-key': args.apiKey = argv[++i]; break
       case '--proxy': args.proxy = argv[++i]; break
       case '--dedicated-first': args.dedicatedFirst = true; break
       case '--twitter-auth-token': args.twitterAuthToken = argv[++i]; break
@@ -84,6 +86,7 @@ koishi-plugin-video-parser-all CLI — 像 you-get 一样解析/下载视频
   -o, --output <dir>     下载目录（默认当前目录）
   --json                 以 JSON 输出解析结果
   --api <url>            覆盖默认主解析 API
+  --api-key <key>        api-new.ifphp.com 网关 API Key（配置后自动切换新网关）
   --proxy <url>          HTTP 代理，如 http://127.0.0.1:7890
   --dedicated-first      优先使用平台专属 API
   --twitter-auth-token <t>  X 登录态 auth_token（解析需登录推文，受 CF 指纹限制）
@@ -237,6 +240,7 @@ async function main(): Promise<void> {
 
   const config = buildConfig({
     primaryApiUrl: args.api,
+    apiKey: args.apiKey || '',
     platformDedicatedFirst: args.dedicatedFirst ? { [type]: true } : {},
     proxy: args.proxy ? parseProxy(args.proxy) : { enabled: false },
     debug: args.debug,

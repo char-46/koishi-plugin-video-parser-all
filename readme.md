@@ -124,6 +124,18 @@ Public tweets use the syndication API with zero config. **Login-required tweets*
 | `parseErrorItemFormat` | string | ... | 错误格式 (Error format) |
 | `deduplicationTipText` | string | 链接 ${url} 在最近 ${interval} 秒内已解析过，已跳过。 | 重复解析提示 (Duplication tip) |
 
+### 解析网关 (Parse Gateway)
+
+依据上游[迁移公告（issue #12）](https://github.com/Minecraft-1314/koishi-plugin-video-parser-all/issues/12)，本插件采用**条件化双网关**：
+
+| 配置项 (Config) | 类型 (Type) | 默认值 (Default) | 说明 (Description) |
+|----------------|-------------|-------------------|---------------------|
+| `apiKey` | string | ''（空） | api-new.ifphp.com 网关 API Key。[注册获取](https://api-new.ifphp.com/auth/login) |
+
+- **配置了 `apiKey`** → 自动切换到新网关 `api-new.ifphp.com`（主 API `/api/svparse` + B站/抖音/快手/视频号/豆包/皮皮搞笑专属端点），所有请求携带 `X-API-Key` 头
+- **未配置** → 继续使用旧网关 `api.bugpk.com`（无需 Key，行为与 v1.5.8 相同）。注意：旧网关将逐步停止解析能力，建议尽早配置 `apiKey`
+- X/Twitter 解析不受网关影响（始终走原生 syndication/GraphQL）
+
 ## 支持的变量 (Supported Variables)
 
 > 在 `unifiedMessageFormat` 中可使用以下变量，空行自动隐藏。  

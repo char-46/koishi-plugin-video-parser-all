@@ -240,6 +240,7 @@ export const Config = Schema.intersect([
     ).description('全局字段映射 JSON'),
     twitterAuthToken: Schema.string().default('').role('secret').description('X/Twitter 登录态 auth_token（仅解析需登录推文时用；受 Cloudflare 指纹限制，服务端可能 403）'),
     twitterCt0: Schema.string().default('').role('secret').description('X/Twitter 登录态 ct0（与 auth_token 配对，同时作为 csrf token）'),
+    apiKey: Schema.string().default('').role('secret').description('api-new.ifphp.com 网关 API Key（https://api-new.ifphp.com/auth/login 注册获取）。配置后自动切换到新网关；留空则继续使用旧网关 api.bugpk.com（旧网关将逐步停服）'),
   }).description('API 与平台'),
 
   Schema.object({
