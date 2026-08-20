@@ -20,7 +20,7 @@
 
 ## 链接匹配规则
 
-`BUILTIN_LINK_RULES` 中归属 `jimeng`（`index.ts:403-406`）：
+`BUILTIN_LINK_RULES` 中归属 `jimeng`（`platforms/rules.ts`）：
 
 ```js
 /https?:\/\/(?:www\.)?jimeng\.jianying\.com\/[^\s'"“”‘’]*/gi

@@ -13,7 +13,8 @@
 | 链接匹配 `extractAllUrlsFromMessage` / `linkTypeParser` / `cleanUrl` | `utils/url.ts` |
 | 平台配置查询 `getPlatformConfig` | `platforms/custom.ts` |
 | 链接规则 `BUILTIN_LINK_RULES` | `platforms/rules.ts` |
-| 专属 API 表 `defaultDedicatedApis` | `platforms/dedicated-apis.ts` |
+| 专属 API 表 `defaultDedicatedApisLegacy/New` + 网关常量 | `platforms/dedicated-apis.ts` |
+| X 原生解析 `parseTwitter` | `platforms/twitter.ts`（经 `utils/tls-client.ts` 的 cycletls 惰性客户端） |
 | 解析编排 `flush` / `processSingleUrl` / `parseUrl` / `fetchApi` | `sender/flush.ts` + `engine/fetcher.ts` |
 | 统一解析引擎 `parseApiResponse` | `engine/parser.ts` |
 | 缓存 / 并发 / 去重 | `utils/cache.ts` + `utils/concurrency.ts` + `utils/common.ts` |
@@ -82,8 +83,8 @@ sequenceDiagram
         FL->>CL: acquire()
         FL->>FL: 检查 platformEnabled[type]
 
-        opt enableDeduplication 且 deduplicationInterval > 0
-            FL->>DC: get(url)
+        opt 未 skipDedup（手动 parse 命令跳过）且 enableDeduplication 且 interval > 0
+            FL->>DC: get(scopeKey)<br/>scopeKey = channelId::url<br/>（去重按会话隔离）
             alt 命中（interval 内）
                 FL->>SM: sendWithTimeout(deduplicationTipText)
                 Note over FL: 跳过此链接
@@ -121,13 +122,13 @@ sequenceDiagram
 
         PSU-->>FL: {success, data:{text, parsed}} | {success:false, msg}
 
-        opt 解析成功 且 enableDeduplication
-            FL->>CDC: get(contentFingerprint(parsed))
+        opt 解析成功 且 dedupEnabled（非 skipDedup）
+            FL->>CDC: get(scopeKey + contentFingerprint)<br/>（内容去重同样按会话隔离）
             alt 内容指纹命中
                 Note over FL: 跳过重复内容（不发送）
             else 未命中
                 FL->>CDC: set(fp, now)
-                FL->>DC: set(url, now)
+                FL->>DC: set(scopeKey, now)
             end
         end
 
@@ -144,11 +145,23 @@ sequenceDiagram
 
 ## API 选择逻辑（fetchApi 内 apiList 构建）
 
-顺序由 `getPlatformConfig().dedicatedFirst`（来自 `config.platformDedicatedFirst[type]`）决定：
+先按网关选择（上游 issue #12）：配置 `apiKey` → 新网关 `api-new.ifphp.com`（无备用 API，全部带 `X-API-Key` 头）；否则 → 旧网关 `api.bugpk.com`（`primaryApiUrl` 可覆盖）。专属端点表也随网关切换（`defaultDedicatedApisLegacy` / `defaultDedicatedApisNew`）。
+
+随后顺序由 `getPlatformConfig().dedicatedFirst`（来自 `config.platformDedicatedFirst[type]`）决定：
 
 ```mermaid
 flowchart LR
-    Start([dedicatedFirst?]) --> Q1{dedicatedFirst<br/>= true?}
+    GW{配置 apiKey?}
+    GW -->|新网关| NA[主 API svparse<br/>+X-API-Key]
+    NA --> ND{backupAllowed?<br/>新网关恒否}
+    ND -->|是（理论）| NB[备用 API]
+    ND -->|否| NE{有新专属 API?}
+    NB --> NE
+    NE -->|是| NF[专属 API]
+    NE -->|否| EndN([结束])
+    NF --> EndN
+
+    GW -->|旧网关| Q1{dedicatedFirst<br/>= true?}
     Q1 -->|是| A1[专属 API]
     A1 --> A2[默认主 API]
     A2 --> A3{backupAllowed?<br/>douyin/xhs/<br/>instagram/jimeng}
@@ -163,13 +176,15 @@ flowchart LR
     B3 --> B4
     B4 --> End2([结束])
 
+    style NA fill:#bbf7d0
     style A1 fill:#fde68a
     style B4 fill:#fde68a
     style A3 fill:#bfdbfe
     style B2 fill:#bfdbfe
+    style GW fill:#fca5a5
 ```
 
-> 自定义平台（`custom_*`）强制 `dedicatedFirst = true`，仅使用其自定义 `apiUrl`。
+> 自定义平台（`custom_*`）强制 `dedicatedFirst = true`，仅使用其自定义 `apiUrl`。`customApis` 配置的专属 API 及其 apiKey 优先于网关选择。
 
 ## 结果发送分支
 

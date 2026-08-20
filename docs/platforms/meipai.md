@@ -18,7 +18,7 @@
 
 ## 链接匹配规则
 
-`BUILTIN_LINK_RULES` 中归属 `meipai`（`index.ts:394`）：
+`BUILTIN_LINK_RULES` 中归属 `meipai`（`platforms/rules.ts`）：
 
 ```js
 /https?:\/\/(?:www\.)?meipai\.com\/media\/\d{10,}/gi

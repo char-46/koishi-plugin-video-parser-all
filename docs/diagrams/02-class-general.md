@@ -1,6 +1,6 @@
 # 通用类图
 
-描述插件的核心类型、数据契约与函数依赖关系。源码位置：`src/index.ts`。
+描述插件的核心类型、数据契约与函数依赖关系。源码位置：`src/types.ts`、`src/utils/`、`src/engine/`、`src/platforms/` 等多模块。
 
 ## 类与接口
 
@@ -9,12 +9,24 @@ classDiagram
     direction LR
 
     class SimpleLRUCache~V~ {
-        -map: Map~string,{value,expireAt}~
+        -map: Map~string, CacheEntry~
         +max: number
         +ttlMs: number
         +get(key) V|undefined
         +set(key, value) void
         +clear() void
+    }
+    note for SimpleLRUCache "CacheEntry = { value: V, expireAt: number }"
+
+    class LivePhoto {
+        +image: string
+        +video: string
+    }
+    class MusicInfo {
+        +title?: string
+        +author?: string
+        +cover?: string
+        +url?: string
     }
 
     class ConcurrencyLimiter {
@@ -42,8 +54,8 @@ classDiagram
         +video: string
         +videos: VideoQuality[]
         +images: string[]
-        +live_photo: {image,video}[]
-        +music: {title?,author?,cover?,url?}
+        +live_photo: LivePhoto[]
+        +music: MusicInfo
         +like: number
         +comment: number
         +collect: number

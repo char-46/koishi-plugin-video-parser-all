@@ -18,7 +18,7 @@
 
 ## 链接匹配规则
 
-`BUILTIN_LINK_RULES` 中归属 `acfun`（`index.ts:386`）：
+`BUILTIN_LINK_RULES` 中归属 `acfun`（`platforms/rules.ts`）：
 
 ```js
 /https?:\/\/(?:www\.)?acfun\.cn\/v\/ac\d{10,}/gi

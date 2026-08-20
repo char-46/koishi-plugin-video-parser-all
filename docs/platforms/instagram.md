@@ -18,7 +18,7 @@
 
 ## 链接匹配规则
 
-`BUILTIN_LINK_RULES` 中归属 `instagram`（`index.ts:397-399`）：
+`BUILTIN_LINK_RULES` 中归属 `instagram`（`platforms/rules.ts`）：
 
 ```js
 /https?:\/\/(?:www\.)?instagram\.com\/p\/[0-9a-zA-Z_\/-]+/gi

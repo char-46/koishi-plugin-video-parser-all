@@ -18,7 +18,7 @@
 
 ## 链接匹配规则
 
-`BUILTIN_LINK_RULES` 中归属 `weishi`（`index.ts:391`）：
+`BUILTIN_LINK_RULES` 中归属 `weishi`（`platforms/rules.ts`）：
 
 ```js
 /https?:\/\/weishi\.qq\.com\/weishi\/feed\/[0-9a-zA-Z_\/-]+/gi

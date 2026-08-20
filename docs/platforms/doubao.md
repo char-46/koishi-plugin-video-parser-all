@@ -18,7 +18,7 @@
 
 ## 链接匹配规则
 
-`BUILTIN_LINK_RULES` 中归属 `doubao`（`index.ts:400-401`）：
+`BUILTIN_LINK_RULES` 中归属 `doubao`（`platforms/rules.ts`）：
 
 ```js
 /https?:\/\/(?:www\.)?doubao\.com\/video\/\d{10,}/gi

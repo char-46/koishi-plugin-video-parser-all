@@ -18,7 +18,7 @@
 
 ## 链接匹配规则
 
-`BUILTIN_LINK_RULES` 中归属 `oasis`（`index.ts:407`）：
+`BUILTIN_LINK_RULES` 中归属 `oasis`（`platforms/rules.ts`）：
 
 ```js
 /https?:\/\/(?:www\.)?oasis\.weibo\.com\/v\/[0-9a-zA-Z_\/-]+/gi

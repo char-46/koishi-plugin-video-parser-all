@@ -18,7 +18,7 @@
 
 ## 链接匹配规则
 
-`BUILTIN_LINK_RULES` 中归属 `xiaohongshu`（`index.ts:371-374`）：
+`BUILTIN_LINK_RULES` 中归属 `xiaohongshu`（`platforms/rules.ts`）：
 
 ```js
 /https?:\/\/(?:www\.)?xiaohongshu\.com\/discovery\/item\/[0-9a-zA-Z_\/-]+/gi

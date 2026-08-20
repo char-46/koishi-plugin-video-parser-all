@@ -18,7 +18,7 @@
 
 ## 链接匹配规则
 
-`BUILTIN_LINK_RULES` 中归属 `lishi`（`index.ts:410-411`）：
+`BUILTIN_LINK_RULES` 中归属 `lishi`（`platforms/rules.ts`）：
 
 ```js
 /https?:\/\/(?:www\.)?pearvideo\.com\/video_\d+/gi

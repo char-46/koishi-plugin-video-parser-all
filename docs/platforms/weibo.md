@@ -18,7 +18,7 @@
 
 ## 链接匹配规则
 
-`BUILTIN_LINK_RULES` 中归属 `weibo`（`index.ts:375-378`）：
+`BUILTIN_LINK_RULES` 中归属 `weibo`（`platforms/rules.ts`）：
 
 ```js
 /https?:\/\/weibo\.com\/\d+\/[0-9a-zA-Z_\/-]+/gi

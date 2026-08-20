@@ -18,7 +18,7 @@
 
 ## 链接匹配规则
 
-`BUILTIN_LINK_RULES` 中归属 `bilibili`（`index.ts:361-365`）：
+`BUILTIN_LINK_RULES` 中归属 `bilibili`（`platforms/rules.ts`）：
 
 ```js
 /https?:\/\/(?:www\.)?bilibili\.com\/video\/([ab]v[0-9a-zA-Z_-]+)(?:\?[^\s'"“”‘’]*)?/gi

@@ -18,7 +18,7 @@
 
 ## 链接匹配规则
 
-`BUILTIN_LINK_RULES` 中归属 `pipigx`（`index.ts:414-415`）：
+`BUILTIN_LINK_RULES` 中归属 `pipigx`（`platforms/rules.ts`）：
 
 ```js
 /https?:\/\/h5\.pipigx\.com\/pp\/post\/\d+/gi

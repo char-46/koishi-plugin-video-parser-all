@@ -1,14 +1,15 @@
 # 架构 / 模块依赖图
 
-> 本图反映 **拆分后** 的多模块结构（`refactor/split-modules` 分支）。原单文件 `index.ts`（1238 行）已按「平台无关 / 平台特定」拆分为 16 个文件。
+> 本图反映 **拆分后** 的多模块结构。原单文件 `index.ts`（1238 行）已按「平台无关 / 平台特定」拆分为多个模块，另含 CLI 与测试。
 
 ## 目录结构
 
 ```
 src/
-├── index.ts              # 薄入口（~50 行）：createRuntime + 注册 message/parse/dispose
-├── config.ts             # name 常量 + Config Schema（10 组 intersect）
-├── types.ts              # 5 个核心 interface
+├── index.ts              # 薄入口（~80 行）：createRuntime + 注册 message/parse/parse-diag/dispose
+├── cli.ts                # you-get 风格 CLI（pnpx tsx src/cli.ts <url> [选项]）
+├── config.ts             # name 常量 + Config Schema（10 组 intersect，含 apiKey/twitter 凭证/enableDiagCommand）
+├── types.ts              # 核心 interface（ParsedData / LinkMatch / ApiItem / …）
 ├── runtime.ts            # ParserRuntime 接口 + createRuntime 工厂
 ├── utils/                # 平台无关工具
 │   ├── cache.ts          # SimpleLRUCache
@@ -17,19 +18,21 @@ src/
 │   ├── common.ts         # delay / getErrorMessage / parseCount / pickBestQuality / contentFingerprint / getText
 │   ├── field-mapping.ts  # getNestedValue / parseFieldMapping
 │   ├── format.ts         # formatDuration / formatPublishTime / generateFormattedText
-│   └── url.ts            # cleanUrl / linkTypeParser / extractAllUrlsFromMessage（接收 rules，平台无关）
+│   ├── url.ts            # cleanUrl / linkTypeParser / extractAllUrlsFromMessage（接收 rules，平台无关）
+│   └── tls-client.ts     # cycletls 惰性客户端（预检自愈/musl 子包调度/exec 探针/diagnoseTls 自检）
 ├── engine/               # 解析引擎（平台无关）
 │   ├── parser.ts         # parseApiResponse 统一引擎
-│   └── fetcher.ts        # fetchApi / parseUrl / processSingleUrl
+│   └── fetcher.ts        # fetchApi / parseUrl / processSingleUrl（含双网关选择）
 ├── sender/               # 消息发送（平台无关）
 │   ├── sender.ts         # sendWithTimeout / sendMedia
 │   ├── forward.ts        # buildForwardNode
-│   └── flush.ts          # flush 编排
+│   └── flush.ts          # flush 编排（FlushOptions：skipDedup；去重按会话隔离）
 └── platforms/            # 平台特定（数据 + 配置逻辑）
     ├── rules.ts          # BUILTIN_LINK_RULES（27 平台链接规则）
-    ├── dedicated-apis.ts # defaultDedicatedApis（专属 API 表）
-    ├── custom.ts         # buildCustomLinkRules / buildAuthHeaders / getPlatformConfig
-    └── (registry)        # 平台信息现分散于 rules + dedicated-apis + config.ts 三处开关
+    ├── dedicated-apis.ts # 双网关常量：NEW/LEGACY_GATEWAY_PRIMARY + defaultDedicatedApis{Legacy,New}
+    ├── twitter.ts        # X 原生解析器（syndication + GraphQL 回退）
+    └── custom.ts         # buildCustomLinkRules / buildAuthHeaders / getPlatformConfig（含网关选择）
+test/                     # vitest 测试（mock session/http，无需 Koishi bot）
 ```
 
 ## 分层依赖
@@ -58,7 +61,8 @@ flowchart TB
     subgraph Platform["平台层 (platforms/)"]
         CU["custom.ts<br/>getPlatformConfig / buildCustomLinkRules / buildAuthHeaders"]
         RL["rules.ts<br/>BUILTIN_LINK_RULES"]
-        DA["dedicated-apis.ts<br/>defaultDedicatedApis"]
+        DA["dedicated-apis.ts<br/>双网关常量 + Legacy/New 专属表"]
+        TW["twitter.ts<br/>parseTwitter（原生解析）"]
     end
 
     subgraph Utils["工具层 (utils/)"]
@@ -69,6 +73,7 @@ flowchart TB
         CACHE["cache.ts"]
         CONC["concurrency.ts"]
         LOG["logger.ts"]
+        TLS["tls-client.ts<br/>cycletls 惰性客户端"]
     end
 
     subgraph Types["类型 / 配置"]
@@ -81,6 +86,7 @@ flowchart TB
     IDX --> SD
     IDX --> URL
     IDX --> CM
+    IDX --> TLS
     RT --> CACHE
     RT --> CU
     RT --> RL
@@ -95,10 +101,13 @@ flowchart TB
     FL --> CM
     FE --> PR
     FE --> CU
+    FE --> DA
+    FE --> TW
     FE --> CACHE
     FE --> LOG
     FE --> CM
     FE --> FMT
+    TW --> TLS
     PR --> FM
     PR --> CM
     PR --> LOG
@@ -170,15 +179,15 @@ flowchart LR
     Text["格式化文字"]
     Send["发送"]
 
-    Msg -->|extractAllUrlsFromMessage<br/>(utils/url + rt.allRules)| Match
-    Match -->|flush → getPlatformConfig<br/>(platforms/custom)| Conf
-    Match -->|fetchApi<br/>(engine/fetcher)| Raw
-    Conf -.->|决定 apiList 顺序| Raw
-    Raw -->|parseApiResponse<br/>(engine/parser) + fieldMapping| Parsed
-    Parsed -->|generateFormattedText<br/>(utils/format)| Text
-    Parsed -->|sendMedia / 合并转发<br/>(sender/*)| Send
+    Msg -->|"extractAllUrlsFromMessage (utils/url + rt.allRules)"| Match
+    Match -->|"flush → getPlatformConfig (platforms/custom)"| Conf
+    Match -->|"fetchApi (engine/fetcher)"| Raw
+    Conf -.->|"决定 apiList 顺序"| Raw
+    Raw -->|"parseApiResponse (engine/parser) + fieldMapping"| Parsed
+    Parsed -->|"generateFormattedText (utils/format)"| Text
+    Parsed -->|"sendMedia / 合并转发 (sender/*)"| Send
     Text --> Send
-    RT -.->|注入 config/http/cache| Match
+    RT -.->|"注入 config/http/cache"| Match
     RT -.-> Conf
 
     style Parsed fill:#fef3c7
@@ -188,14 +197,15 @@ flowchart LR
 
 ## 平台数据分布（现状，已对齐）
 
-平台信息仍分布在 3 处文件，但 27 个平台在所有表中**已完全对齐**（见 [平台总览](../platforms/README.md#平台数据一致性已修正)）：
+平台信息分布在多处文件，27 个平台在所有表中**已完全对齐**（见 [平台总览](../platforms/README.md#平台数据一致性已修正)）：
 
 | 数据 | 文件 | 说明 |
 |------|------|------|
-| 链接匹配规则 | `platforms/rules.ts` | `BUILTIN_LINK_RULES`（含 toutiao，已补全） |
-| 专属 API URL | `platforms/dedicated-apis.ts` | `defaultDedicatedApis` |
-| 启用 / 专属优先开关 | `config.ts` | `platformEnabled` / `platformDedicatedFirst`（含 jimeng/toutiao，已补全） |
-| 自定义 API 枚举 | `config.ts` | `customApis.platform`（27 项全，已补全） |
-| 备用 API 白名单 | `engine/fetcher.ts` | `fetchApi` 内 `Set(['douyin','xiaohongshu','instagram','jimeng'])` |
+| 链接匹配规则 | `platforms/rules.ts` | `BUILTIN_LINK_RULES`（27 平台全） |
+| 网关入口常量 | `platforms/dedicated-apis.ts` | `NEW_GATEWAY_PRIMARY` / `LEGACY_GATEWAY_PRIMARY` / `LEGACY_GATEWAY_BACKUP` |
+| 专属 API URL | `platforms/dedicated-apis.ts` | `defaultDedicatedApisLegacy`（14 平台）/ `defaultDedicatedApisNew`（6 平台），按网关选择 |
+| 启用 / 专属优先开关 | `config.ts` | `platformEnabled` / `platformDedicatedFirst` |
+| 自定义 API 枚举 | `config.ts` | `customApis.platform`（27 项全） |
+| 网关切换 & 备用白名单 | `engine/fetcher.ts` | `apiKey` 有无决定网关；`Set(['douyin','xiaohongshu','instagram','jimeng'])` 仅旧网关生效 |
 
-> 后续可演进：将上述 5 处合并为单一的 `platforms/registry.ts` 注册表，从一处定义派生链接规则、专属 API、Schema 开关默认值。本次拆分保持行为不变，未做此合并。
+> 后续可演进：将上述各处合并为单一的 `platforms/registry.ts` 注册表，从一处定义派生链接规则、专属 API、Schema 开关默认值。本次拆分保持行为不变，未做此合并。

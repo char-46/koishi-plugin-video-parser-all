@@ -18,7 +18,7 @@
 
 ## 链接匹配规则
 
-`BUILTIN_LINK_RULES` 中归属 `tiktok`（`index.ts:383-385`）：
+`BUILTIN_LINK_RULES` 中归属 `tiktok`（`platforms/rules.ts`）：
 
 ```js
 /https?:\/\/(?:www\.)?tiktok\.com\/@[\w.]+\/video\/\d{10,}/gi

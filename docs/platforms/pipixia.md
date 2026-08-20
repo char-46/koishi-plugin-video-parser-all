@@ -18,7 +18,7 @@
 
 ## 链接匹配规则
 
-`BUILTIN_LINK_RULES` 中归属 `pipixia`（`index.ts:416-417`）：
+`BUILTIN_LINK_RULES` 中归属 `pipixia`（`platforms/rules.ts`）：
 
 ```js
 /https?:\/\/(?:h5|www)\.pipix\.com\/[0-9a-zA-Z_\/-]+/gi

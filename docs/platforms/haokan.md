@@ -18,7 +18,7 @@
 
 ## 链接匹配规则
 
-`BUILTIN_LINK_RULES` 中归属 `haokan`（`index.ts:393`）：
+`BUILTIN_LINK_RULES` 中归属 `haokan`（`platforms/rules.ts`）：
 
 ```js
 /https?:\/\/haokan\.baidu\.com\/v\?vid=[0-9a-zA-Z_\/-]+/gi

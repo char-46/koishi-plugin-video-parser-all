@@ -18,7 +18,7 @@
 
 ## 链接匹配规则
 
-`BUILTIN_LINK_RULES` 中归属 `kuaishou`（`index.ts:368-370`）：
+`BUILTIN_LINK_RULES` 中归属 `kuaishou`（`platforms/rules.ts`）：
 
 ```js
 /https?:\/\/(?:www\.)?kuaishou\.com\/short-video\/[0-9a-zA-Z_\/-]+/gi

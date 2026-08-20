@@ -18,7 +18,7 @@
 
 ## 链接匹配规则
 
-`BUILTIN_LINK_RULES` 中归属 `doubao_image`（`index.ts:402`）：
+`BUILTIN_LINK_RULES` 中归属 `doubao_image`（`platforms/rules.ts`）：
 
 ```js
 /https?:\/\/(?:www\.)?doubao\.com\/thread\/[^\s'"“”‘’]+/gi

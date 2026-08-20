@@ -4,44 +4,53 @@
 
 每个平台对应同目录下一个 `.md` 数据卡，含基本信息表、链接规则原文与该平台的解析流程时序图。
 
+## 解析网关（上游 issue #12 迁移）
+
+| 网关 | 入口 | 认证 | 备用 API | 专属端点 |
+|------|------|------|----------|----------|
+| 旧网关（默认，未配 apiKey） | `api.bugpk.com/api/short_videos` | 无 | 有（白名单平台） | 14 个平台 |
+| 新网关（配置 `apiKey` 后自动切换） | `api-new.ifphp.com/api/svparse` | `X-API-Key` 头 | **无** | 6 个平台（bilibili/douyin/kuaishou/wechat_channel/doubao/pipigx） |
+
+> `customApis` 配置的专属 API 优先于网关选择；X/Twitter 不走网关（原生解析）。下表"专属 API"列以 `旧/新` 标注两网关的端点差异，`—` 表示该网关无专属端点（走主 API 兜底）。
+
 ## 平台总览表
 
-| # | ID | 中文名 | 解析能力 | 专属 API | 备用 API | enabled | dedicatedFirst | customApis | 备注 |
+| # | ID | 中文名 | 解析能力 | 专属 API（旧/新） | 备用 API | enabled | dedicatedFirst | customApis | 备注 |
 |---|----|--------|----------|----------|----------|---------|----------------|------------|------|
-| 1 | `bilibili` | [哔哩哔哩](bilibili.md) | 视频 | ✓ | ✗ | ✓ | ✓ | ✓ | |
-| 2 | `douyin` | [抖音](douyin.md) | 短视频/图集/实况 | ✓ | ✓ | ✓ | ✓ | ✓ | 备用允许 |
-| 3 | `kuaishou` | [快手](kuaishou.md) | 短视频/图集 | ✓ | ✗ | ✓ | ✓ | ✓ | |
-| 4 | `xiaohongshu` | [小红书](xiaohongshu.md) | 图文/视频 | ✓ | ✓ | ✓ | ✓ | ✓ | 备用允许 |
-| 5 | `weibo` | [微博](weibo.md) | 视频/图集 | ✓ | ✗ | ✓ | ✓ | ✓ | |
-| 6 | `xigua` | [西瓜视频](xigua.md) | 短视频 | ✗ | ✗ | ✓ | ✓ | ✓ | 仅主 API |
-| 7 | `youtube` | [YouTube](youtube.md) | 视频 | ✗ | ✗ | ✓ | ✓ | ✓ | 仅主 API |
-| 8 | `tiktok` | [TikTok](tiktok.md) | 短视频 | ✗ | ✗ | ✓ | ✓ | ✓ | 仅主 API |
-| 9 | `acfun` | [AcFun（A站）](acfun.md) | 视频 | ✗ | ✗ | ✓ | ✓ | ✓ | 仅主 API |
-| 10 | `zhihu` | [知乎](zhihu.md) | 视频 | ✗ | ✗ | ✓ | ✓ | ✓ | 仅主 API |
-| 11 | `weishi` | [微视](weishi.md) | 短视频 | ✗ | ✗ | ✓ | ✓ | ✓ | 仅主 API |
-| 12 | `huya` | [虎牙](huya.md) | 直播回放/视频 | ✓ | ✗ | ✓ | ✓ | ✓ | |
-| 13 | `haokan` | [好看视频](haokan.md) | 短视频 | ✗ | ✗ | ✓ | ✓ | ✓ | 仅主 API |
-| 14 | `meipai` | [美拍](meipai.md) | 短视频 | ✗ | ✗ | ✓ | ✓ | ✓ | 仅主 API |
-| 15 | `twitter` | [Twitter/X](twitter.md) | 视频/图文 | 原生 | ✗ | ✓ | ✓ | ✓ | 原生 syndication 解析（不走 bugpk） |
-| 16 | `instagram` | [Instagram](instagram.md) | 图文/Reels | ✗ | ✓ | ✓ | ✓ | ✓ | 备用允许（无专属） |
-| 17 | `doubao` | [豆包（视频）](doubao.md) | 视频 | ✓ | ✗ | ✓ | ✓ | ✓ | |
-| 18 | `doubao_image` | [豆包（图集）](doubao_image.md) | 图文 | ✓ | ✗ | ✓ | ✓ | ✓ | |
-| 19 | `jimeng` | [即梦](jimeng.md) | AI视频/AI图片 | ✓ | ✓ | ✓ | ✓ | ✓ | 备用允许 |
-| 20 | `oasis` | [绿洲](oasis.md) | 视频/图文 | ✗ | ✗ | ✓ | ✓ | ✓ | 仅主 API |
-| 21 | `wechat_channel` | [视频号](wechat_channel.md) | 短视频 | ✓ | ✗ | ✓ | ✓ | ✓ | |
-| 22 | `lishi` | [梨视频](lishi.md) | 短视频 | ✗ | ✗ | ✓ | ✓ | ✓ | 仅主 API |
-| 23 | `quanmin` | [全民直播](quanmin.md) | 直播 | ✗ | ✗ | ✓ | ✓ | ✓ | 仅主 API |
-| 24 | `pipigx` | [皮皮搞笑](pipigx.md) | 短视频 | ✓ | ✗ | ✓ | ✓ | ✓ | |
-| 25 | `pipixia` | [皮皮虾](pipixia.md) | 短视频 | ✓ | ✗ | ✓ | ✓ | ✓ | |
-| 26 | `zuiyou` | [最右](zuiyou.md) | 短视频 | ✓ | ✗ | ✓ | ✓ | ✓ | |
-| 27 | `toutiao` | [今日头条](toutiao.md) | 视频 | ✓ | ✗ | ✓ | ✓ | ✓ | 已补全链接规则 |
+| 1 | `bilibili` | [哔哩哔哩](bilibili.md) | 视频 | ✓/✓ | ✗ | ✓ | ✓ | ✓ | |
+| 2 | `douyin` | [抖音](douyin.md) | 短视频/图集/实况 | ✓/✓(dyjx) | ✓(仅旧) | ✓ | ✓ | ✓ | 备用仅旧网关 |
+| 3 | `kuaishou` | [快手](kuaishou.md) | 短视频/图集 | ✓/✓(ksjx) | ✗ | ✓ | ✓ | ✓ | |
+| 4 | `xiaohongshu` | [小红书](xiaohongshu.md) | 图文/视频 | ✓/— | ✓(仅旧) | ✓ | ✓ | ✓ | 备用仅旧网关 |
+| 5 | `weibo` | [微博](weibo.md) | 视频/图集 | ✓/— | ✗ | ✓ | ✓ | ✓ | |
+| 6 | `xigua` | [西瓜视频](xigua.md) | 短视频 | ✗/— | ✗ | ✓ | ✓ | ✓ | 仅主 API |
+| 7 | `youtube` | [YouTube](youtube.md) | 视频 | ✗/— | ✗ | ✓ | ✓ | ✓ | 仅主 API |
+| 8 | `tiktok` | [TikTok](tiktok.md) | 短视频 | ✗/— | ✗ | ✓ | ✓ | ✓ | 仅主 API |
+| 9 | `acfun` | [AcFun（A站）](acfun.md) | 视频 | ✗/— | ✗ | ✓ | ✓ | ✓ | 仅主 API |
+| 10 | `zhihu` | [知乎](zhihu.md) | 视频 | ✗/— | ✗ | ✓ | ✓ | ✓ | 仅主 API |
+| 11 | `weishi` | [微视](weishi.md) | 短视频 | ✗/— | ✗ | ✓ | ✓ | ✓ | 仅主 API |
+| 12 | `huya` | [虎牙](huya.md) | 直播回放/视频 | ✓/— | ✗ | ✓ | ✓ | ✓ | |
+| 13 | `haokan` | [好看视频](haokan.md) | 短视频 | ✗/— | ✗ | ✓ | ✓ | ✓ | 仅主 API |
+| 14 | `meipai` | [美拍](meipai.md) | 短视频 | ✗/— | ✗ | ✓ | ✓ | ✓ | 仅主 API |
+| 15 | `twitter` | [Twitter/X](twitter.md) | 视频/图文 | 原生 | ✗ | ✓ | ✓ | ✓ | 原生 syndication/GraphQL 解析（不走网关） |
+| 16 | `instagram` | [Instagram](instagram.md) | 图文/Reels | ✗/— | ✓(仅旧) | ✓ | ✓ | ✓ | 备用仅旧网关（无专属） |
+| 17 | `doubao` | [豆包（视频）](doubao.md) | 视频 | ✓/✓ | ✗ | ✓ | ✓ | ✓ | |
+| 18 | `doubao_image` | [豆包（图集）](doubao_image.md) | 图文 | ✓/— | ✗ | ✓ | ✓ | ✓ | |
+| 19 | `jimeng` | [即梦](jimeng.md) | AI视频/AI图片 | ✓/— | ✓(仅旧) | ✓ | ✓ | ✓ | 备用仅旧网关 |
+| 20 | `oasis` | [绿洲](oasis.md) | 视频/图文 | ✗/— | ✗ | ✓ | ✓ | ✓ | 仅主 API |
+| 21 | `wechat_channel` | [视频号](wechat_channel.md) | 短视频 | ✓/✓(wxsph) | ✗ | ✓ | ✓ | ✓ | |
+| 22 | `lishi` | [梨视频](lishi.md) | 短视频 | ✗/— | ✗ | ✓ | ✓ | ✓ | 仅主 API |
+| 23 | `quanmin` | [全民直播](quanmin.md) | 直播 | ✗/— | ✗ | ✓ | ✓ | ✓ | 仅主 API |
+| 24 | `pipigx` | [皮皮搞笑](pipigx.md) | 短视频 | ✓/✓ | ✗ | ✓ | ✓ | ✓ | |
+| 25 | `pipixia` | [皮皮虾](pipixia.md) | 短视频 | ✓/— | ✗ | ✓ | ✓ | ✓ | |
+| 26 | `zuiyou` | [最右](zuiyou.md) | 短视频 | ✓/— | ✗ | ✓ | ✓ | ✓ | |
+| 27 | `toutiao` | [今日头条](toutiao.md) | 视频 | ✓/— | ✗ | ✓ | ✓ | ✓ | 新网关走主 API 兜底 |
 
-图例：✓ 有/默认开启｜✗ 无
+图例：✓ 有/默认开启｜✗ 无｜— 该网关无专属端点
 
 ## 字段说明
 
-- **专属 API**：`defaultDedicatedApis[type]`，存在则可走专属接口（由 `platformDedicatedFirst[type]` 决定顺序）
-- **备用 API**：是否在 `backupAllowed` 白名单（`['douyin','xiaohongshu','instagram','jimeng']`），即 `backupApiUrl`
+- **专属 API**：`defaultDedicatedApisLegacy[type]` / `defaultDedicatedApisNew[type]`（`platforms/dedicated-apis.ts` 双表，按网关选择），存在则可走专属接口（由 `platformDedicatedFirst[type]` 决定顺序）
+- **备用 API**：是否在 `backupAllowed` 白名单（`['douyin','xiaohongshu','instagram','jimeng']`）且使用旧网关（新网关无备用）
 - **enabled**：是否出现在 `platformEnabled` 开关表（默认 true）
 - **dedicatedFirst**：是否出现在 `platformDedicatedFirst` 开关表（默认 false）
 - **customApis**：是否出现在 `customApis.platform` 枚举（影响 UI 下拉，不影响运行时）
@@ -50,16 +59,27 @@
 
 ```mermaid
 flowchart LR
-    A[默认主 API<br/>primaryApiUrl] --> B{backupAllowed?}
+    GW{配置了 apiKey?}
+    GW -->|是（新网关）| NA[默认主 API<br/>api-new.ifphp.com/api/svparse<br/>X-API-Key]
+    NA --> ND{有新网关专属 API?}
+    ND -->|是| NE[专属 API]
+    ND -->|否| NEND([结束])
+    NE --> NEND
+
+    GW -->|否（旧网关）| A[默认主 API<br/>primaryApiUrl]
+    A --> B{backupAllowed?}
     B -->|是| C[备用主 API<br/>backupApiUrl]
     B -->|否| D
     C --> D{有专属 API?}
-    D -->|是| E[专属 API<br/>defaultDedicatedApis]
-    D -->|否| F[结束]
+    D -->|是| E[专属 API]
+    D -->|否| F([结束])
     E --> F
+
+    style NA fill:#bbf7d0
+    style A fill:#fde68a
 ```
 
-> 若用户将某平台 `platformDedicatedFirst[type]` 设为 true，则顺序变为：专属 API → 主 API → 备用 API。
+> 若用户将某平台 `platformDedicatedFirst[type]` 设为 true，则顺序变为：专属 API → 主 API →（旧网关且白名单时）备用 API。`customApis` 配置的 API 优先于以上全部。
 
 ## 字段映射来源
 

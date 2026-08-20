@@ -18,7 +18,7 @@
 
 ## 链接匹配规则
 
-`BUILTIN_LINK_RULES` 中归属 `douyin`（`index.ts:366-367`）：
+`BUILTIN_LINK_RULES` 中归属 `douyin`（`platforms/rules.ts`）：
 
 ```js
 /https?:\/\/(?:www\.)?douyin\.com\/video\/\d{10,}/gi

@@ -18,7 +18,7 @@
 
 ## 链接匹配规则
 
-`BUILTIN_LINK_RULES` 中归属 `wechat_channel`（`index.ts:408-409`）：
+`BUILTIN_LINK_RULES` 中归属 `wechat_channel`（`platforms/rules.ts`）：
 
 ```js
 /https?:\/\/channels\.weixin\.qq\.com\/[0-9a-zA-Z_\/-]+/gi

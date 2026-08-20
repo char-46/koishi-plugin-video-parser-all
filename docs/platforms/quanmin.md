@@ -18,7 +18,7 @@
 
 ## 链接匹配规则
 
-`BUILTIN_LINK_RULES` 中归属 `quanmin`（`index.ts:412-413`）：
+`BUILTIN_LINK_RULES` 中归属 `quanmin`（`platforms/rules.ts`）：
 
 ```js
 /https?:\/\/(?:www\.)?quanmin\.tv\/[0-9a-zA-Z_\/-]+/gi

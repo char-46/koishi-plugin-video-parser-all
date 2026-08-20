@@ -18,7 +18,7 @@
 
 ## 链接匹配规则
 
-`BUILTIN_LINK_RULES` 中归属 `zuiyou`（`index.ts:418-419`）：
+`BUILTIN_LINK_RULES` 中归属 `zuiyou`（`platforms/rules.ts`）：
 
 ```js
 /https?:\/\/share\.xiaochuankeji\.cn\/hybrid\/share\/post\?pid=\d+/gi

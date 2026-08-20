@@ -18,7 +18,7 @@
 
 ## 链接匹配规则
 
-`BUILTIN_LINK_RULES` 中归属 `huya`（`index.ts:392`）：
+`BUILTIN_LINK_RULES` 中归属 `huya`（`platforms/rules.ts`）：
 
 ```js
 /https?:\/\/(?:www\.)?huya\.com\/video\/[0-9a-zA-Z_\/-]+/gi
