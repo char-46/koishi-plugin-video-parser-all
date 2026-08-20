@@ -79,6 +79,34 @@ describe('flush 端到端（mock session + mock http，无需 Koishi bot）', ()
     expect(sentTexts(s2._sent).some(t => t.includes('已解析过'))).toBe(true) // 第二次命中去重
   })
 
+  it('去重按会话隔离：另一会话首次发送同一链接不受影响', async () => {
+    const rt = makeRuntime({
+      config: { enableDeduplication: true, deduplicationInterval: 180, globalFieldMapping: '{}' },
+      http: mockHttp({ code: 200, data: { title: '跨会话视频', url: 'https://x/v.mp4' } }),
+    })
+    const url = 'https://v.douyin.com/D2/'
+    const s1 = mockSession({ channelId: 'ch-A' })
+    await flush(rt, s1 as any, [{ type: 'douyin', url, id: 'D2' }])
+    const s2 = mockSession({ channelId: 'ch-B' })
+    await flush(rt, s2 as any, [{ type: 'douyin', url, id: 'D2' }])
+    expect(sentTexts(s2._sent).some(t => t.includes('已解析过'))).toBe(false) // 不同会话不去重
+    expect(sentTexts(s2._sent).some(t => t.includes('标题：'))).toBe(true)    // 正常解析发送
+  })
+
+  it('skipDedup：手动命令显式触发时跳过去重', async () => {
+    const rt = makeRuntime({
+      config: { enableDeduplication: true, deduplicationInterval: 180, globalFieldMapping: '{}' },
+      http: mockHttp({ code: 200, data: { title: '手动视频', url: 'https://x/v.mp4' } }),
+    })
+    const url = 'https://v.douyin.com/D3/'
+    const s1 = mockSession({ channelId: 'ch-C' })
+    await flush(rt, s1 as any, [{ type: 'douyin', url, id: 'D3' }])
+    await flush(rt, s1 as any, [{ type: 'douyin', url, id: 'D3' }], { skipDedup: true })
+    const texts = sentTexts(s1._sent)
+    expect(texts.filter(t => t.includes('已解析过')).length).toBe(0)                          // 无去重提示
+    expect(texts.filter(t => t.includes('标题：')).length).toBe(2)                            // 两次都完整发送
+  })
+
   it('平台被禁用：不发送任何内容', async () => {
     const rt = makeRuntime({
       config: { platformEnabled: { douyin: false }, globalFieldMapping: '{}' },

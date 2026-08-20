@@ -9,7 +9,18 @@ import { sendWithTimeout, sendMedia } from './sender'
 import { getPlatformConfig } from '../platforms/custom'
 import { processSingleUrl } from '../engine/fetcher'
 
-export async function flush(rt: ParserRuntime, session: any, matches: LinkMatch[]) {
+export interface FlushOptions {
+  /** 手动命令（parse <url>）显式触发：跳过去重检查（用户明确要求重新解析） */
+  skipDedup?: boolean
+}
+
+/** 去重键按会话隔离：防的是同一会话内刷屏，不阻断内容跨会话传播 */
+function dedupScopeKey(session: any, url: string): string {
+  const scope = session?.channelId || session?.guildId || session?.userId || 'global'
+  return `${scope}::${url}`
+}
+
+export async function flush(rt: ParserRuntime, session: any, matches: LinkMatch[], opts: FlushOptions = {}) {
   const { config, dedupCache, contentDedupCache } = rt
   debugLog('INFO', `开始解析 ${matches.length} 个链接`)
   const items: { text: string; parsed: ParsedData }[] = []
@@ -23,8 +34,10 @@ export async function flush(rt: ParserRuntime, session: any, matches: LinkMatch[
         debugLog('INFO', `平台 ${match.type} 已禁用，跳过链接: ${match.url}`)
         return
       }
-      if (config.enableDeduplication !== false && config.deduplicationInterval > 0) {
-        const lastTime = dedupCache.get(match.url)
+      const dedupEnabled = !opts.skipDedup && config.enableDeduplication !== false && config.deduplicationInterval > 0
+      const scopeKey = dedupScopeKey(session, match.url)
+      if (dedupEnabled) {
+        const lastTime = dedupCache.get(scopeKey)
         if (lastTime && (Date.now() - lastTime < config.deduplicationInterval * 1000)) {
           debugLog('INFO', `跳过重复链接: ${match.url}`)
           const shortUrl = match.url.length > 80 ? match.url.slice(0, 80) + '...' : match.url
@@ -38,15 +51,16 @@ export async function flush(rt: ParserRuntime, session: any, matches: LinkMatch[
       const fieldMapping = platformConf.fieldMapping
       const result = await processSingleUrl(rt, match.url, match.type, fieldMapping, platformConf)
       if (result.success) {
-        if (config.enableDeduplication !== false && config.deduplicationInterval > 0) {
-          const fp = contentFingerprint(result.data.parsed)
+        if (dedupEnabled) {
+          // 内容指纹去重同样按会话隔离：同内容跨会话传播属正常行为
+          const fp = dedupScopeKey(session, contentFingerprint(result.data.parsed))
           const lastDedup = contentDedupCache.get(fp)
           if (lastDedup && (Date.now() - lastDedup < config.deduplicationInterval * 1000)) {
             debugLog('INFO', `跳过重复内容: ${match.url}`)
             return
           }
           contentDedupCache.set(fp, Date.now())
-          dedupCache.set(match.url, Date.now())
+          dedupCache.set(scopeKey, Date.now())
         }
         items.push(result.data)
       } else {

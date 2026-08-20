@@ -45,7 +45,7 @@ export function apply(ctx: Context, config: any) {
         await sendWithTimeout(rt, session, h.quote(session?.messageId) + getText(config, 'waitingTipText'))
       } catch {}
     }
-    await flush(rt, session, matches)
+    await flush(rt, session, matches, { skipDedup: true })
   })
 
   if (config.enableDiagCommand) {

@@ -45,12 +45,13 @@ export function makeConfig(overrides: Record<string, any> = {}): any {
 }
 
 /** 模拟 Koishi session：记录所有 send 调用，便于断言 */
-export function mockSession(opts: { content?: string; elements?: any[]; platform?: string; subtype?: string } = {}) {
+export function mockSession(opts: { content?: string; elements?: any[]; platform?: string; subtype?: string; channelId?: string } = {}) {
   const sent: any[] = []
   return {
     platform: opts.platform ?? 'onebot',
     selfId: 'bot1',
     userId: 'user1',
+    channelId: opts.channelId,
     messageId: 'msg1',
     subtype: opts.subtype ?? 'private',
     content: opts.content ?? '',
