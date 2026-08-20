@@ -79,6 +79,43 @@ function mapSyndication(tw: any): ParsedData {
   p.images = Array.isArray(tw.photos) ? tw.photos.map((x: any) => (typeof x === 'string' ? x : x?.url)).filter((u: any) => !!u) : []
   p.cover = String(pick(vd?.posterUrl, p.images[0], ''))
   p.duration = vd?.durationMs ? Math.floor(Number(vd.durationMs) / 1000) : 0
+
+  // syndication 新版结构：无 videoDetails 时，媒体在 mediaDetails[]（含 video_info）或顶层 video
+  if (!p.video && !p.images.length) {
+    const md = Array.isArray(tw.mediaDetails) ? tw.mediaDetails : []
+    for (const m of md) {
+      if (!m) continue
+      if (m.type === 'photo') {
+        if (m.media_url_https && !p.images.includes(m.media_url_https)) p.images.push(m.media_url_https)
+      } else if ((m.type === 'video' || m.type === 'animated_gif') && Array.isArray(m.video_info?.variants)) {
+        const vs = m.video_info.variants
+          .filter((v: any) => v && v.url)
+          .map((v: any) => ({ quality: v.bitrate ? `${v.bitrate}bps` : (v.content_type || 'unknown'), url: v.url, bit_rate: Number(v.bitrate || 0) }))
+          .sort((a: VideoQuality, b: VideoQuality) => (b.bit_rate || 0) - (a.bit_rate || 0))
+        if (vs.length) {
+          p.videos.push(...vs)
+          if (!p.video) {
+            p.video = vs[0].url
+            if (!p.cover) p.cover = String(pick(m.media_url_https, ''))
+            if (m.video_info.duration_millis) p.duration = Math.floor(Number(m.video_info.duration_millis) / 1000)
+          }
+        }
+      }
+    }
+    // 顶层 video（amplify 等场景）：poster + variants（src 而非 url）
+    if (!p.video && Array.isArray(tw.video?.variants)) {
+      const vs = tw.video.variants
+        .filter((v: any) => v && (v.src || v.url))
+        .map((v: any) => ({ quality: v.bitrate ? `${v.bitrate}bps` : (v.type || 'unknown'), url: v.src || v.url, bit_rate: Number(v.bitrate || 0) }))
+        .sort((a: VideoQuality, b: VideoQuality) => (b.bit_rate || 0) - (a.bit_rate || 0))
+      if (vs.length) {
+        p.videos.push(...vs)
+        p.video = vs[0].url
+        if (!p.cover) p.cover = String(pick(tw.video.poster, ''))
+        if (tw.video.durationMs) p.duration = Math.floor(Number(tw.video.durationMs) / 1000)
+      }
+    }
+  }
   p.type = p.video ? 'video' : (p.images.length ? 'image' : 'video')
 
   p.title = text.slice(0, 100)
