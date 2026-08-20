@@ -62,60 +62,76 @@ function baseParsed(): ParsedData {
   }
 }
 
+/** 归一化变体列表（三种来源的字段名不同：url/src、content_type/type） */
+function normalizeVariants(variants: any[]): VideoQuality[] {
+  return variants
+    .filter((v: any) => v && (v.url || v.src))
+    .map((v: any) => ({
+      quality: v.bitrate ? `${v.bitrate}bps` : (v.content_type || v.type || 'unknown'),
+      url: v.url || v.src,
+      bit_rate: Number(v.bitrate || 0),
+    }))
+    .sort((a: VideoQuality, b: VideoQuality) => (b.bit_rate || 0) - (a.bit_rate || 0))
+}
+
+/**
+ * 统一媒体提取（新结构优先，旧结构兜底）：
+ * - 新：mediaDetails[]（photo/video_info.variants）+ 顶层 video（poster/src variants）
+ * - 旧：videoDetails（posterUrl/url variants）+ photos[]
+ */
+function extractSyndicationMedia(tw: any, p: ParsedData): void {
+  // 1) mediaDetails[]：新版标准位置
+  if (Array.isArray(tw.mediaDetails)) {
+    for (const m of tw.mediaDetails) {
+      if (!m) continue
+      if (m.type === 'photo') {
+        if (m.media_url_https && !p.images.includes(m.media_url_https)) p.images.push(m.media_url_https)
+      } else if ((m.type === 'video' || m.type === 'animated_gif') && Array.isArray(m.video_info?.variants)) {
+        const vs = normalizeVariants(m.video_info.variants)
+        if (vs.length) {
+          p.videos.push(...vs)
+          if (!p.video) {
+            p.video = vs[0].url
+            p.cover = String(pick(m.media_url_https, p.cover))
+            if (m.video_info.duration_millis) p.duration = Math.floor(Number(m.video_info.duration_millis) / 1000)
+          }
+        }
+      }
+    }
+  }
+  // 2) 顶层 video（amplify 等）：poster + variants
+  if (!p.video && Array.isArray(tw.video?.variants)) {
+    const vs = normalizeVariants(tw.video.variants)
+    if (vs.length) {
+      p.videos.push(...vs)
+      p.video = vs[0].url
+      p.cover = String(pick(tw.video.poster, p.cover))
+      if (tw.video.durationMs) p.duration = Math.floor(Number(tw.video.durationMs) / 1000)
+    }
+  }
+  // 3) 旧结构兜底：videoDetails + photos
+  if (!p.video && Array.isArray(tw.videoDetails?.variants)) {
+    const vs = normalizeVariants(tw.videoDetails.variants)
+    if (vs.length) {
+      p.videos.push(...vs)
+      p.video = vs[0].url
+      p.cover = String(pick(tw.videoDetails.posterUrl, p.cover))
+      if (tw.videoDetails.durationMs) p.duration = Math.floor(Number(tw.videoDetails.durationMs) / 1000)
+    }
+  }
+  if (!p.images.length && Array.isArray(tw.photos)) {
+    p.images = tw.photos.map((x: any) => (typeof x === 'string' ? x : x?.url)).filter((u: any) => !!u)
+  }
+}
+
 /** 把 syndication 响应映射为 ParsedData */
 function mapSyndication(tw: any): ParsedData {
   const user = tw.user || {}
   const text = String(pick(tw.note_tweet?.text, tw.text, ''))
   const p = baseParsed()
 
-  const vd = tw.videoDetails
-  if (vd && Array.isArray(vd.variants) && vd.variants.length) {
-    p.videos = vd.variants
-      .filter((v: any) => v && v.url)
-      .map((v: any) => ({ quality: v.bitrate ? `${v.bitrate}bps` : (v.content_type || 'unknown'), url: v.url, bit_rate: Number(v.bitrate || 0) }))
-      .sort((a: VideoQuality, b: VideoQuality) => (b.bit_rate || 0) - (a.bit_rate || 0))
-    p.video = p.videos[0]?.url || ''
-  }
-  p.images = Array.isArray(tw.photos) ? tw.photos.map((x: any) => (typeof x === 'string' ? x : x?.url)).filter((u: any) => !!u) : []
-  p.cover = String(pick(vd?.posterUrl, p.images[0], ''))
-  p.duration = vd?.durationMs ? Math.floor(Number(vd.durationMs) / 1000) : 0
-
-  // syndication 新版结构：无 videoDetails 时，媒体在 mediaDetails[]（含 video_info）或顶层 video
-  if (!p.video && !p.images.length) {
-    const md = Array.isArray(tw.mediaDetails) ? tw.mediaDetails : []
-    for (const m of md) {
-      if (!m) continue
-      if (m.type === 'photo') {
-        if (m.media_url_https && !p.images.includes(m.media_url_https)) p.images.push(m.media_url_https)
-      } else if ((m.type === 'video' || m.type === 'animated_gif') && Array.isArray(m.video_info?.variants)) {
-        const vs = m.video_info.variants
-          .filter((v: any) => v && v.url)
-          .map((v: any) => ({ quality: v.bitrate ? `${v.bitrate}bps` : (v.content_type || 'unknown'), url: v.url, bit_rate: Number(v.bitrate || 0) }))
-          .sort((a: VideoQuality, b: VideoQuality) => (b.bit_rate || 0) - (a.bit_rate || 0))
-        if (vs.length) {
-          p.videos.push(...vs)
-          if (!p.video) {
-            p.video = vs[0].url
-            if (!p.cover) p.cover = String(pick(m.media_url_https, ''))
-            if (m.video_info.duration_millis) p.duration = Math.floor(Number(m.video_info.duration_millis) / 1000)
-          }
-        }
-      }
-    }
-    // 顶层 video（amplify 等场景）：poster + variants（src 而非 url）
-    if (!p.video && Array.isArray(tw.video?.variants)) {
-      const vs = tw.video.variants
-        .filter((v: any) => v && (v.src || v.url))
-        .map((v: any) => ({ quality: v.bitrate ? `${v.bitrate}bps` : (v.type || 'unknown'), url: v.src || v.url, bit_rate: Number(v.bitrate || 0) }))
-        .sort((a: VideoQuality, b: VideoQuality) => (b.bit_rate || 0) - (a.bit_rate || 0))
-      if (vs.length) {
-        p.videos.push(...vs)
-        p.video = vs[0].url
-        if (!p.cover) p.cover = String(pick(tw.video.poster, ''))
-        if (tw.video.durationMs) p.duration = Math.floor(Number(tw.video.durationMs) / 1000)
-      }
-    }
-  }
+  extractSyndicationMedia(tw, p)
+  if (!p.cover) p.cover = String(pick(p.images[0], ''))
   p.type = p.video ? 'video' : (p.images.length ? 'image' : 'video')
 
   p.title = text.slice(0, 100)
@@ -126,7 +142,7 @@ function mapSyndication(tw: any): ParsedData {
   p.like = Number(pick(tw.favorite_count, 0)) || 0
   p.comment = Number(pick(tw.conversation_count, tw.reply_count, 0)) || 0
   p.share = Number(pick(tw.retweet_count, 0)) || 0
-  p.play = Number(pick(vd?.viewCount, tw.views, 0)) || 0
+  p.play = Number(pick(tw.video?.viewCount, tw.videoDetails?.viewCount, tw.views, 0)) || 0
   p.collect = Number(pick(tw.bookmark_count, 0)) || 0
   if (tw.created_at) { const t = Date.parse(tw.created_at); if (!isNaN(t)) p.publishTime = t }
   p.author_followers = Number(pick(user.followers_count, 0)) || 0
