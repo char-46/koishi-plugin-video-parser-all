@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { parseTwitter } from '../src/platforms/twitter'
-import { fetchApi } from '../src/engine/fetcher'
+import { fetchApi, parseUrl } from '../src/engine/fetcher'
 import { makeRuntime, mockHttp } from './helpers'
 
 const photoTweet = {
@@ -62,6 +62,24 @@ describe('parseTwitter — X 原生 syndication 解析', () => {
       .rejects.toThrow(/不可访问|登录/)
   })
 
+  it('纯文字推文：type=text，保留正文与作者，不再返回空内容', async () => {
+    // 真实案例：syndication 200 但无任何媒体字段（无 photos/mediaDetails/video）
+    const textTweet = {
+      __typename: 'Tweet',
+      text: '在亲戚眼里，我属于那种懂电脑的孩子……',
+      created_at: '2026-08-22T04:30:29.000Z',
+      favorite_count: 277,
+      conversation_count: 13,
+      user: { screen_name: 'AkasakaRentsuki', name: '大土贝', profile_image_url_https: 'https://pbs.twimg.com/a.jpg' },
+    }
+    const t = await parseTwitter('https://x.com/u/status/2091020159150628935', mockHttp(textTweet))
+    expect(t.type).toBe('text')
+    expect(t.desc).toContain('懂电脑')
+    expect(t.author).toBe('大土贝')
+    expect(t.video).toBe('')
+    expect(t.images).toHaveLength(0)
+  })
+
   it('非 X 链接抛出"无法提取 ID"', async () => {
     await expect(parseTwitter('https://example.com/no-id', mockHttp(photoTweet))).rejects.toThrow(/推文 ID/)
   })
@@ -83,6 +101,28 @@ describe('fetchApi — twitter 路由到原生解析', () => {
     await fetchApi(rt, 'https://x.com/u/status/266031293945503744', 'twitter')
     await fetchApi(rt, 'https://x.com/u/status/266031293945503744', 'twitter')
     expect(calls).toBe(1)
+  })
+
+  it('纯文字推文：parseUrl 判定成功（修复"解析接口返回空内容"）', async () => {
+    const textTweet = {
+      __typename: 'Tweet',
+      text: '纯文字推文正文',
+      favorite_count: 1,
+      user: { screen_name: 'u', name: 'U' },
+    }
+    const rt = makeRuntime({ http: mockHttp(textTweet) })
+    const result = await parseUrl(rt, 'https://x.com/u/status/2091020159150628935', 'twitter')
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.type).toBe('text')
+      expect(result.data.desc).toBe('纯文字推文正文')
+    }
+  })
+
+  it('统一 API 空响应（type=video 且无视频）：仍判失败', async () => {
+    const rt = makeRuntime({ http: mockHttp({ code: 200, data: {} }) })
+    const result = await parseUrl(rt, 'https://v.douyin.com/x/', 'douyin')
+    expect(result.success).toBe(false)
   })
 })
 

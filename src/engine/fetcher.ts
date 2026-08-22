@@ -114,7 +114,13 @@ export async function fetchApi(rt: ParserRuntime, url: string, type: string, fie
 export async function parseUrl(rt: ParserRuntime, url: string, type: string, fieldMapping?: Record<string, string>, platformConf?: any): Promise<{ success: true; data: ParsedData } | { success: false; msg: string }> {
   try {
     const info = await fetchApi(rt, url, type, fieldMapping, platformConf)
-    if (info.video || info.images.length > 0 || info.live_photo.length > 0) return { success: true, data: info }
+    const hasMedia = !!(info.video || info.images.length > 0 || info.live_photo.length > 0)
+    if (hasMedia) return { success: true, data: info }
+    // 纯文字内容（如 X 纯文字推文）：有正文即视为成功，下游发送文字卡片
+    if (info.type === 'text' && (info.title || info.desc)) {
+      debugLog('INFO', `纯文字内容: ${url}`)
+      return { success: true, data: info }
+    }
     debugLog('WARN', `解析成功但无内容: ${url}`)
     return { success: false, msg: '解析接口返回空内容' }
   } catch (error) {

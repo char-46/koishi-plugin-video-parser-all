@@ -132,7 +132,8 @@ function mapSyndication(tw: any): ParsedData {
 
   extractSyndicationMedia(tw, p)
   if (!p.cover) p.cover = String(pick(p.images[0], ''))
-  p.type = p.video ? 'video' : (p.images.length ? 'image' : 'video')
+  // 纯文字推文：type=text（无任何媒体但有正文，属合法内容）
+  p.type = p.video ? 'video' : (p.images.length ? 'image' : 'text')
 
   p.title = text.slice(0, 100)
   p.desc = text
@@ -186,7 +187,8 @@ function mapGraphql(rawResult: any): ParsedData {
   }
   p.images = photos
   if (!p.cover) p.cover = String(pick(photos[0], ''))
-  p.type = p.video ? 'video' : (p.images.length ? 'image' : 'video')
+  // 纯文字推文：type=text
+  p.type = p.video ? 'video' : (p.images.length ? 'image' : 'text')
 
   p.title = text.slice(0, 100)
   p.desc = text
