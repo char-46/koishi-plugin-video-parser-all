@@ -29,6 +29,14 @@ export function apply(ctx: Context, config: any) {
   if (config.nsfwVault) configureVault(config.nsfwVault)
   const cap = nsfwCapability(rt)
   ctx.logger.info(`内容安全能力：混淆${cap.ferret ? '可用（ferret-transform 服务已加载）' : '不可用（未检测到 koishi-plugin-ferret-transform-image，相关功能停用）'}；审核${cap.moderation ? `已启用（${cap.moderation}）` : '未配置'}`)
+  // 易踩坑提示：配了审核 Provider 但模式全 off，审核不会执行
+  if (cap.moderation) {
+    const globalMode = config.nsfwGlobalMode || 'off'
+    const anyPlatformOn = Object.values(config.nsfwPlatformMode || {}).some((m: any) => m === 'smart' || m === 'full')
+    if (globalMode === 'off' && !anyPlatformOn) {
+      ctx.logger.warn('内容安全：审核 Provider 已配置，但全平台一刀切模式为「关闭」且无任何平台显式开启——审核不会执行。请在「全平台一刀切模式」选 smart/full，或单独设置平台处理模式。')
+    }
+  }
 
   ctx.on('message', async (session) => {
     if (!config.enable) return
