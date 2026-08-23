@@ -148,6 +148,8 @@ function mapSyndication(tw: any): ParsedData {
   if (tw.created_at) { const t = Date.parse(tw.created_at); if (!isNaN(t)) p.publishTime = t }
   p.author_followers = Number(pick(user.followers_count, 0)) || 0
   p.author_signature = String(pick(user.description, ''))
+  // title = desc 前 100 字截断 → 抑制 title（desc 为全集，完整保留）
+  if (p.title && p.desc && p.desc.startsWith(p.title)) p.title = ''
   return p
 }
 
@@ -203,6 +205,7 @@ function mapGraphql(rawResult: any): ParsedData {
   if (legacy.created_at) { const t = Date.parse(legacy.created_at); if (!isNaN(t)) p.publishTime = t }
   p.author_followers = Number(pick(ulegacy.followers_count, 0)) || 0
   p.author_signature = String(pick(ulegacy.description, ''))
+  if (p.title && p.desc && p.desc.startsWith(p.title)) p.title = ''
   return p
 }
 

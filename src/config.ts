@@ -1,4 +1,5 @@
 import { Schema } from 'koishi'
+import { NsfwConfig, SendStrategyConfig } from './nsfw/config'
 
 export const name = 'video-parser-all'
 
@@ -71,6 +72,10 @@ export const Config = Schema.intersect([
     maxDescLength: Schema.number().min(0).step(1).default(200).description('简介长度上限'),
     maxConcurrent: Schema.number().min(1).step(1).default(3).description('解析最大并发数'),
   }).description('性能与限制'),
+
+  SendStrategyConfig,
+
+  NsfwConfig,
 
   Schema.object({
     timeout: Schema.number().min(0).step(1).default(180000).description('API 请求超时 (ms)'),

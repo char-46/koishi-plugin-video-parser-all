@@ -92,3 +92,18 @@ export function sentTexts(sent: any[]): string[] {
     return c.type ? `<${c.type}>` : JSON.stringify(c)
   })
 }
+
+/** 递归展开发送内容（元素数组/合并转发节点），提取全部 h 元素 */
+export function sentElements(sent: any[]): any[] {
+  const out: any[] = []
+  const walk = (c: any) => {
+    if (c == null) return
+    if (Array.isArray(c)) { c.forEach(walk); return }
+    if (typeof c === 'object') {
+      out.push(c)
+      if (Array.isArray(c.children)) c.children.forEach(walk)
+    }
+  }
+  sent.forEach(walk)
+  return out
+}

@@ -8,8 +8,16 @@ import { createRuntime } from './runtime'
 import { sendWithTimeout } from './sender/sender'
 import { flush } from './sender/flush'
 import { diagnoseTls } from './utils/tls-client'
+import { nsfwCapability } from './nsfw/gate'
+import { videoVault, configureVault } from './nsfw/vault'
+import { clearModerationCache } from './nsfw/moderation/cache'
 
 export { name, Config }
+
+/** 可选服务依赖：ferret-transform-image (>=0.0.4) 提供图片混淆服务 */
+export const inject = {
+  optional: ['ferret-transform'],
+}
 
 export function apply(ctx: Context, config: any) {
   setDebugEnabled(config.debug || false)
@@ -17,9 +25,15 @@ export function apply(ctx: Context, config: any) {
 
   const rt = createRuntime(ctx, config)
 
+  // 内容安全子系统：按配置初始化 vault
+  if (config.nsfwVault) configureVault(config.nsfwVault)
+  const cap = nsfwCapability(rt)
+  ctx.logger.info(`内容安全能力：混淆${cap.ferret ? '可用（ferret-transform 服务已加载）' : '不可用（未检测到 koishi-plugin-ferret-transform-image，相关功能停用）'}；审核${cap.moderation ? `已启用（${cap.moderation}）` : '未配置'}`)
+
   ctx.on('message', async (session) => {
     if (!config.enable) return
     if (/^\s*parse\b/i.test(session.content || '')) return
+    if (/^\s*(取视频|parse\/getvideo)\b/i.test(session.content || '')) return
     if (session.subtype === 'file_upload') return
     if (session.elements?.some(elem => elem.type === 'file' || elem.type === 'folder')) return
     if (session.selfId === session.userId) return
@@ -48,6 +62,33 @@ export function apply(ctx: Context, config: any) {
     await flush(rt, session, matches, { skipDedup: true })
   })
 
+  ctx.command('parse/getvideo <token>', '领取受限暂存视频（仅私聊）').alias('取视频')
+    .action(async ({ session }, token) => {
+      if (!session) return
+      if (session.guildId) return '该命令仅限私聊使用（凭 token 领取你请求解析的受限视频）。'
+      if (!token) return '请提供取件 token。'
+      const result = videoVault.redeem(token, String(session.userId))
+      if (!result.ok) {
+        if (result.reason === 'forbidden') return '该 token 不属于你，无法领取。'
+        if (result.reason === 'expired') return '暂存已过期，请重新触发解析获取新 token。'
+        return 'token 无效或暂存已被清理。'
+      }
+      const { entry } = result
+      const label = entry.meta.title ? `「${entry.meta.title.slice(0, 40)}」` : '视频'
+      try {
+        if (entry.buffer) {
+          await sendWithTimeout(rt, session, `${label}（${entry.meta.sizeMB ?? '?'}MB）：`)
+          await sendWithTimeout(rt, session, h.video(entry.buffer, 'video/mp4'), config.retryTimes)
+        } else if (entry.url) {
+          await sendWithTimeout(rt, session, h.video(entry.url), config.retryTimes)
+        } else {
+          return '暂存条目已损坏。'
+        }
+      } catch (e: any) {
+        return `视频发送失败：${e?.message || e}。可稍后重试「取视频 <token>」（有效期内可多次领取）。`
+      }
+    })
+
   if (config.enableDiagCommand) {
     ctx.command('parse/diag', '诊断 X 登录态解析环境（cycletls）').action(async ({ session }) => {
       await sendWithTimeout(rt, session, '开始诊断 cycletls 环境，约需 30 秒…')
@@ -73,6 +114,8 @@ export function apply(ctx: Context, config: any) {
   ctx.on('dispose', () => {
     rt.urlCacheLocal.clear()
     rt.dedupCache.clear()
+    videoVault.clear()
+    clearModerationCache()
     debugLog('INFO', '插件已卸载')
   })
 

@@ -1,7 +1,7 @@
 {
   "name": "@char46/koishi-plugin-video-parser-all",
   "description": "Koishi 全平台视频/图集解析插件，支持抖音/快手/B站/微博/小红书/YouTube/TikTok等20+平台",
-  "version": "1.11.0+upstream.1.6.2",
+  "version": "1.12.0+upstream.1.6.2",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "bin": {
@@ -119,6 +119,11 @@
   },
   "koishi": {
     "upstream": "Minecraft-1314/koishi-plugin-video-parser-all@1.6.2",
+    "service": {
+      "optional": [
+        "ferret-transform"
+      ]
+    },
     "description": {
       "en": "Universal video/album parser for 27+ platforms (Douyin, Kuaishou, Bilibili, Weibo, Xiaohongshu, YouTube, TikTok, X/Twitter, etc.)",
       "zh": "全平台视频/图集解析插件，支持抖音/快手/B站/微博/小红书/YouTube/TikTok/X等27+平台，去水印发送，可配置第三方解析代理与字段映射"

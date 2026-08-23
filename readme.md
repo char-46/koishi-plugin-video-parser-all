@@ -36,7 +36,33 @@ This package is a fork with **independent semver + upstream baseline in build me
 | 指令 (Command) | 说明 (Description) | 示例 (Example) |
 |----------------|--------------------|----------------|
 | `parse <url>` | 手动解析指定的视频/图集链接 | `parse https://v.douyin.com/xxxx/` |
-| `parse/diag` | 诊断 X/Twitter 登录态解析环境（cycletls），无需服务器 shell | `parse/diag` |
+| `parse/getvideo <token>`（别名 `取视频`） | 领取受限暂存视频（仅私聊，token 绑定请求者） | `取视频 ab12cd34…` |
+| `parse/diag` | 诊断 X/Twitter 登录态解析环境（cycletls），默认关闭 | `parse/diag` |
+
+## 内容安全与图片混淆 (NSFW Moderation & Image Scramble)
+
+**可选依赖**：安装 [koishi-plugin-ferret-transform-image](https://www.npmjs.com/package/koishi-plugin-ferret-transform-image)（**≥ 0.0.4**）后自动启用；未安装时本组功能全部停用，不影响其他功能。建议同时开启该插件的 `enableGroupDescramble` 配置，群友可在群内引用图片还原。
+
+**策略模型**：
+
+| 层 | 配置 | 说明 |
+|---|---|---|
+| 平台三态 | `nsfwPlatformMode` | `off`（默认，全部关闭）/ `full`（无条件按命中处理）/ `smart`（审核判定） |
+| 全局动作 | `nsfwPolicy.imageAction / videoAction` | 图片：`scramble`（默认，混淆+还原 token）/ `link` / `drop`；视频：`redeem`（默认，暂存+私聊凭 token 取回）/ `link` / `drop` |
+| 高级覆盖 | `nsfwAdvancedPolicy` + `nsfwPlatformPolicyAdvanced` | 平台级覆盖模式与动作 |
+
+**关键规则**：
+- 配置了审核凭证（`nsfwModeration`）→ 平台 `full` 自动等效 `smart`（全量混淆失效，按审核判定）
+- 审核 API **故障即拦截**（fail-closed）：网络/凭证/响应异常一律按命中处理，宁可不发也不放行
+- **视频仅封面送审**；命中后群内只发**文字卡片 + 取件 token**（引用请求者，无封面无视频），原视频暂存内存（默认 ≤200MB/条、20 条、30 分钟，LRU 驱逐），请求者**私聊** `取视频 <token>` 领取（token 绑定请求者，他人无效；超限或下载失败改发原链接文字）
+- 图片混淆 token 每次随机，兼容 ferret 的 `解混淆 <token>` 命令；同消息所有混淆图共用一个 token
+- 作者头像/音乐封面默认跳过混淆（`nsfwPolicy.scrambleAvatar` 可放开头像）
+
+**支持的审核平台**：百度智能云、网易易盾、阿里云、腾讯云、自定义 REST 模板（`nsfwModeration.provider`）。审核结果按图片内容缓存 30 分钟，同图不重复计费。
+
+**发送策略**（`sendStrategy`）：默认 `single` —— 单条解析结果整合为一条消息发送；图片数超过 `singleSendMaxImages`（默认 10）或含视频时自动回退合并转发（需 onebot/satori 且开启 `enableForward`）或逐条模式。`split` 为旧版逐条行为。
+
+**去重三层**（默认全开）：同消息相同链接只解析一次；同消息不同链接解析出相同内容只发首个；标题与简介相同时抑制重复字段。
 
 ## X/Twitter 登录态解析 (X/Twitter Authenticated Parsing)
 

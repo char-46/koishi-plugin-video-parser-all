@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { flush } from '../src/sender/flush'
-import { mockSession, mockHttp, makeRuntime, sentTexts } from './helpers'
+import { mockSession, mockHttp, makeRuntime, sentTexts, sentElements } from './helpers'
 
 /**
  * 注意：parseApiResponse 的 fallback 读取 data.url 作为视频、data.cover 作为封面、
@@ -8,14 +8,14 @@ import { mockSession, mockHttp, makeRuntime, sentTexts } from './helpers'
  */
 
 describe('flush 端到端（mock session + mock http，无需 Koishi bot）', () => {
-  it('视频：发送文字 + 封面（普通逐条模式）', async () => {
+  it('视频：发送文字 + 封面（默认单条整合模式）', async () => {
     const rt = makeRuntime({
       http: mockHttp(() => ({ code: 200, data: { title: '视频标题', url: 'https://x/v.mp4', cover: 'https://x/c.jpg' } })),
     })
     const session = mockSession()
     await flush(rt, session as any, [{ type: 'douyin', url: 'https://v.douyin.com/A/', id: 'A' }])
     expect(sentTexts(session._sent).some(t => t.includes('标题：'))).toBe(true)   // 文字消息
-    expect(session._sent.some(c => c?.type === 'img')).toBe(true)                 // 封面图片元素
+    expect(sentElements(session._sent).some(c => c?.type === 'img')).toBe(true)   // 封面图片元素
   })
 
   it('主 API 失败 → 回退到备用/专属 API', async () => {
@@ -39,7 +39,7 @@ describe('flush 端到端（mock session + mock http，无需 Koishi bot）', ()
     })
     const session = mockSession()
     await flush(rt, session as any, [{ type: 'xiaohongshu', url: 'https://xhslink.com/X', id: 'X' }])
-    expect(session._sent.filter(c => c?.type === 'img').length).toBeGreaterThanOrEqual(2)
+    expect(sentElements(session._sent).filter(c => c?.type === 'img').length).toBeGreaterThanOrEqual(2)
   })
 
   it('直播：发送"直播进行中"提示，不发送视频', async () => {
