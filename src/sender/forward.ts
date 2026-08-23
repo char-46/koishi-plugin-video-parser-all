@@ -1,7 +1,9 @@
 /**
- * 合并转发模式：每个 item 的语义单元构建为合并转发节点（转发气泡）。
- * 单元来自 compose.buildUnits（混淆图 / 取件码同样作为独立气泡）。
- * 仅一个节点时不打包转发卡片，直接发送。
+ * 合并转发模式：把每个语义单元（MessageUnit）构建为一个转发气泡。
+ *
+ * 合并转发卡片 = <message forward> 嵌套多个 <message>，每个内层 <message> 是一个气泡，
+ * 用 <author> 设置气泡昵称（模拟机器人发送）。
+ * 仅一个气泡时不打包卡片，直接发送。
  */
 import { h } from 'koishi'
 import type { ParserRuntime } from '../runtime'
@@ -10,18 +12,19 @@ import { delay } from '../utils/common'
 import { debugLog } from '../utils/logger'
 import { buildUnits, type ProcessedItem } from './compose'
 
+/** 一个转发气泡：<message><author>bot</author>…content…</message> */
 export function buildForwardNode(session: any, content: any, botName: string) {
   let messageContent: any[]
   if (Array.isArray(content)) messageContent = content
   else if (content && typeof content === 'object' && content.type) messageContent = [content]
   else messageContent = [h.text(String(content))]
-  return h('node', { user: { nickname: botName.substring(0, 15), user_id: session.selfId } }, messageContent)
+  return h('message', h('author', { id: session.selfId, name: botName.substring(0, 15) }), messageContent)
 }
 
 export async function sendForward(rt: ParserRuntime, session: any, items: ProcessedItem[]): Promise<void> {
   const { config } = rt
   const botName = config.botName || '视频解析机器人'
-  const nodes: any[] = []
+  const bubbles: any[] = []
   const total = items.length
 
   for (let i = 0; i < total; i++) {
@@ -34,27 +37,25 @@ export async function sendForward(rt: ParserRuntime, session: any, items: Proces
         if (txt) { txt.attrs = { ...txt.attrs, content: `【${i + 1}/${total}】\n${txt.attrs?.content ?? ''}` }; break }
       }
     }
-    for (const u of units) nodes.push(buildForwardNode(session, u.content, botName))
+    for (const u of units) bubbles.push(buildForwardNode(session, u.content, botName))
   }
 
-  // 仅一条消息：直接发送，不打包转发卡片
-  if (nodes.length === 1) {
-    const single = nodes[0]
-    const content = Array.isArray(single.children) ? single.children : [single.children]
+  // 仅一条消息：不打包转发卡片，直接发送
+  if (bubbles.length === 1) {
+    const content = bubbles[0].children
     await sendWithTimeout(rt, session, content, config.retryTimes)
     return
   }
 
-  const MAX_NODES = 50
-  for (let i = 0; i < nodes.length; i += MAX_NODES) {
-    const batch = nodes.slice(i, i + MAX_NODES)
+  const MAX_BUBBLES = 50
+  for (let i = 0; i < bubbles.length; i += MAX_BUBBLES) {
+    const batch = bubbles.slice(i, i + MAX_BUBBLES)
     try {
       await sendWithTimeout(rt, session, h('message', { forward: true }, batch), config.retryTimes)
     } catch (err) {
       debugLog('ERROR', '合并转发失败，降级逐条发送:', err)
       for (const item of items) {
-        const units = buildUnits(rt, item)
-        for (const u of units) {
+        for (const u of buildUnits(rt, item)) {
           await sendWithTimeout(rt, session, u.content).catch(() => {})
           await delay(300)
         }

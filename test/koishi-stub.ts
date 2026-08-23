@@ -36,12 +36,29 @@ export { Schema }
 
 export type Context = any
 
-/** 虚拟元素构造：与 koishi 的 h 结构一致（{ type, attrs, children }），供断言用 */
-const h: any = (type: string, attrs?: any, children?: any) => ({ type, attrs: attrs || {}, children: children || [] })
-h.image = (url: string) => ({ type: 'img', attrs: { src: url } })
-h.video = (url: string) => ({ type: 'video', attrs: { src: url } })
-h.audio = (url: string) => ({ type: 'audio', attrs: { src: url } })
-h.text = (s: string) => ({ type: 'text', attrs: { content: s } })
-h.quote = (id: any) => ({ type: 'quote', attrs: { id } })
-h.element = (type: string, attrs?: any, children?: any) => ({ type, attrs: attrs || {}, children: children || [] })
+/** 虚拟元素构造：对齐 koishi 的 h 语义（{ type, attrs, children }），供断言用 */
+function isElement(x: any): boolean {
+  return x && typeof x === 'object' && typeof x.type === 'string'
+}
+
+const h: any = (type: string, ...args: any[]) => {
+  const attrs: any = {}
+  const children: any[] = []
+  // 与 koishi 一致：首个参数若是「普通对象（非元素、非数组）」视为 attrs
+  if (args[0] && typeof args[0] === 'object' && !isElement(args[0]) && !Array.isArray(args[0])) {
+    Object.assign(attrs, args.shift())
+  }
+  for (const child of args) {
+    if (Array.isArray(child)) children.push(...child.filter((c) => c != null))
+    else if (child != null) children.push(child)
+  }
+  return { type, attrs, children }
+}
+h.text = (s: string) => h('text', { content: s })
+h.image = (url: string) => h('img', { src: url })
+h.video = (url: string) => h('video', { src: url })
+h.audio = (url: string) => h('audio', { src: url })
+h.quote = (id: any) => h('quote', { id })
+h.at = (id: any) => h('at', { id })
+h.element = (type: string, attrs?: any, children?: any) => h(type, attrs, children)
 export { h }

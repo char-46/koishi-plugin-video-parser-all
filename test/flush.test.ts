@@ -54,7 +54,7 @@ describe('flush 端到端（mock session + mock http，无需 Koishi bot）', ()
     expect(JSON.stringify(session._sent)).toContain('直播进行中')
   })
 
-  it('合并转发模式：构建 forward 消息含 video 节点', async () => {
+  it('合并转发模式：构建 forward 消息含气泡', async () => {
     const rt = makeRuntime({
       config: { enableForward: true, showImageText: true, globalFieldMapping: '{}' },
       http: mockHttp({ code: 200, data: { title: '转发视频', url: 'https://x/v.mp4' } }),
@@ -63,8 +63,11 @@ describe('flush 端到端（mock session + mock http，无需 Koishi bot）', ()
     await flush(rt, session as any, [{ type: 'douyin', url: 'https://v.douyin.com/F/', id: 'F' }])
     const fwd = session._sent.find(c => c?.type === 'message' && c.attrs?.forward === true)
     expect(fwd).toBeTruthy()
+    // 内层是 <message> 气泡，含 <author>
     const childTypes = (fwd.children || []).map((n: any) => n?.type)
-    expect(childTypes).toContain('node')
+    expect(childTypes).toContain('message')
+    const firstBubble = fwd.children.find((n: any) => n?.type === 'message')
+    expect(firstBubble.children.map((n: any) => n.type)).toContain('author')
   })
 
   it('URL 去重：第二次相同链接发送去重提示', async () => {
