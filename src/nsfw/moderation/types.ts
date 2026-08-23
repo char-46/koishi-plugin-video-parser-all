@@ -26,6 +26,7 @@ export interface BaiduConf { apiKey: string; secretKey: string }
 export interface YidunConf { secretId: string; secretKey: string }
 export interface AliyunConf { accessKeyId: string; accessKeySecret: string; region?: string }
 export interface TencentConf { secretId: string; secretKey: string; region?: string }
+export interface AzureConf { endpoint: string; apiKey: string }
 export interface CustomConf {
   endpoint: string
   method?: 'GET' | 'POST'
@@ -39,6 +40,7 @@ export type ProviderConf =
   | { provider: 'yidun'; yidun: YidunConf }
   | { provider: 'aliyun'; aliyun: AliyunConf }
   | { provider: 'tencent'; tencent: TencentConf }
+  | { provider: 'azure'; azure: AzureConf }
   | { provider: 'custom'; custom: CustomConf }
 
 export type ProviderFactory = (conf: ProviderConf, http: AxiosInstance) => ModerationProvider

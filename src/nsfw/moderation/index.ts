@@ -11,6 +11,7 @@ import { createBaiduProvider } from './baidu'
 import { createYidunProvider } from './yidun'
 import { createAliyunProvider } from './aliyun'
 import { createTencentProvider } from './tencent'
+import { createAzureProvider } from './azure'
 import { createCustomProvider } from './custom'
 import type { CheckInput, CheckResult, ModerationProvider, ProviderConf } from './types'
 
@@ -31,6 +32,8 @@ export function createProvider(conf: ProviderConf, http: AxiosInstance): Moderat
       return conf.aliyun?.accessKeyId ? createAliyunProvider(conf.aliyun, http) : null
     case 'tencent':
       return conf.tencent?.secretId ? createTencentProvider(conf.tencent, http) : null
+    case 'azure':
+      return conf.azure?.apiKey && conf.azure?.endpoint ? createAzureProvider(conf.azure, http) : null
     case 'custom':
       return conf.custom?.endpoint ? createCustomProvider(conf.custom, http) : null
     default:

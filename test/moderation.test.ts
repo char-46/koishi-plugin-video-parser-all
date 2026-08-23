@@ -76,6 +76,20 @@ describe('moderation — 各平台签名与判定', () => {
     expect(calls[0].headers['X-TC-Action']).toBe('ImageModeration')
   })
 
+  it('Azure：subscription key 头 + severity>=2 判命中', async () => {
+    const { http, calls } = mockHttp(() => ({ data: { categoriesAnalysis: [{ category: 'Sexual', severity: 4 }, { category: 'Violence', severity: 0 }] } }))
+    const p = createProvider({ provider: 'azure', azure: { endpoint: 'https://res.cognitiveservices.azure.com/', apiKey: 'k1' } }, http)!
+    const r = await p.check(input)
+    expect(r.nsfw).toBe(true)
+    expect(r.label).toBe('Sexual')
+    expect(calls[0].url).toContain('/contentsafety/image:analyze?api-version=2023-10-01')
+    expect(calls[0].headers['Ocp-Apim-Subscription-Key']).toBe('k1')
+    // 全部低于阈值 → 合规
+    const { http: http2 } = mockHttp(() => ({ data: { categoriesAnalysis: [{ category: 'Sexual', severity: 0 }] } }))
+    const p2 = createProvider({ provider: 'azure', azure: { endpoint: 'https://res.cognitiveservices.azure.com', apiKey: 'k1' } }, http2)!
+    expect((await p2.check(input)).nsfw).toBe(false)
+  })
+
   it('自定义模板：bodyTemplate 占位替换 + verdictJsonPath 判定', async () => {
     const { http, calls } = mockHttp(() => ({ data: { data: { results: [{ nsfw: 'block' }] } } }))
     const p = createProvider({

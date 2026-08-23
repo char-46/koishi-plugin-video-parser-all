@@ -47,18 +47,19 @@ This package is a fork with **independent semver + upstream baseline in build me
 
 | 层 | 配置 | 说明 |
 |---|---|---|
-| 平台三态 | `nsfwPlatformMode` | `off`（默认，全部关闭）/ `full`（无条件按命中处理）/ `smart`（审核判定） |
+| **全局一刀切** | `nsfwGlobalMode` | `off`（默认）/\ `full` /\ `smart`，对所有未显式配置的平台生效 |
+| 平台覆盖 | `nsfwPlatformMode` | 每平台 `inherit`（默认，跟随全局）/ `off` / `full` / `smart` |
 | 全局动作 | `nsfwPolicy.imageAction / videoAction` | 图片：`scramble`（默认，混淆+还原 token）/ `link` / `drop`；视频：`redeem`（默认，暂存+私聊凭 token 取回）/ `link` / `drop` |
-| 高级覆盖 | `nsfwAdvancedPolicy` + `nsfwPlatformPolicyAdvanced` | 平台级覆盖模式与动作 |
+| 高级覆盖 | `nsfwAdvancedPolicy` + `nsfwPlatformPolicyAdvanced` | 平台级覆盖模式与动作；**高级模式显式 `full` 视为专家意图，配了审核也保留一刀切** |
 
 **关键规则**：
-- 配置了审核凭证（`nsfwModeration`）→ 平台 `full` 自动等效 `smart`（全量混淆失效，按审核判定）
+- 配置了审核凭证（`nsfwModeration`）→ 非高级显式的 `full` 自动等效 `smart`（按审核判定）；需要某平台无条件全量处理时，用高级模式显式设 `full`
 - 审核 API **故障即拦截**（fail-closed）：网络/凭证/响应异常一律按命中处理，宁可不发也不放行
-- **视频仅封面送审**；命中后群内只发**文字卡片 + 取件 token**（引用请求者，无封面无视频），原视频暂存内存（默认 ≤200MB/条、20 条、30 分钟，LRU 驱逐），请求者**私聊** `取视频 <token>` 领取（token 绑定请求者，他人无效；超限或下载失败改发原链接文字）
-- 图片混淆 token 每次随机，兼容 ferret 的 `解混淆 <token>` 命令；同消息所有混淆图共用一个 token
+- **视频仅封面送审**；命中后群内只发**文字卡片 + 取件 token**（引用请求者，无封面无视频），原视频暂存内存（默认 ≤200MB/条、20 条、30 分钟，LRU 驱逐），请求者**私聊** `取视频 <token>` 领取（token 绑定请求者，他人无效；卡片提示含**暂存截止时间** `${until}`；超限或下载失败改发原链接文字）
+- 图片混淆 token 每次随机，兼容 ferret 的 `解混淆 <token>` 命令；同消息所有混淆图共用一个 token。**解码须在私聊**：将混淆图转发到与机器人的私聊并附「解混淆 <token>」（群内直接发 token 无效；如需群内还原，在 ferret 插件开启 `enableGroupDescramble` 后引用图片发送）
 - 作者头像/音乐封面默认跳过混淆（`nsfwPolicy.scrambleAvatar` 可放开头像）
 
-**支持的审核平台**：百度智能云、网易易盾、阿里云、腾讯云、自定义 REST 模板（`nsfwModeration.provider`）。审核结果按图片内容缓存 30 分钟，同图不重复计费。
+**支持的审核平台**：百度智能云、网易易盾、阿里云、腾讯云、**Azure Content Safety**、自定义 REST 模板（`nsfwModeration.provider`）。审核结果按图片内容缓存 30 分钟，同图不重复计费。
 
 **发送策略**（`sendStrategy`）：默认 `single` —— 单条解析结果整合为一条消息发送；图片数超过 `singleSendMaxImages`（默认 10）或含视频时自动回退合并转发（需 onebot/satori 且开启 `enableForward`）或逐条模式。`split` 为旧版逐条行为。
 

@@ -21,10 +21,17 @@ const modeUnion = Schema.union([
   Schema.const('smart' as const).description('内容审核判定'),
 ])
 
+const inheritableModeUnion = Schema.union([
+  Schema.const('inherit' as const).description('跟随全局（默认）'),
+  Schema.const('off' as const).description('强制关闭'),
+  Schema.const('full' as const).description('全量处理（配置审核后自动等效 smart）'),
+  Schema.const('smart' as const).description('内容审核判定'),
+])
+
 function platformModeObject() {
   const shape: Record<string, any> = {}
-  for (const p of ALL_PLATFORMS) shape[p] = modeUnion.default('off').description(p)
-  return Schema.object(shape).description('平台处理模式（默认全部关闭）')
+  for (const p of ALL_PLATFORMS) shape[p] = inheritableModeUnion.default('inherit').description(p)
+  return Schema.object(shape).description('平台处理模式（inherit=跟随全局；显式设置可覆盖全局一刀切）')
 }
 
 export const NsfwConfig = Schema.object({
@@ -40,9 +47,11 @@ export const NsfwConfig = Schema.object({
       Schema.const('drop' as const).description('不发送'),
     ]).default('redeem').description('视频命中后的动作（封面送审判定）'),
     scrambleAvatar: Schema.boolean().default(false).description('作者头像也参与混淆（默认跳过）'),
-    tokenHintText: Schema.string().role('textarea').default('检测到可能不适宜的内容，图片已混淆。可回复该图片并私聊发送「解混淆 <token>」还原。').description('图片混淆提示文案（占位 ${token}）'),
-    videoCardHint: Schema.string().role('textarea').default('检测到受限视频，未在群内发送。原视频已暂存 ${ttl} 分钟，私聊发送「取视频 <token>」领取。').description('受限视频卡片提示文案（占位 ${token} ${ttl}）'),
+    tokenHintText: Schema.string().role('textarea').default('检测到可能不适宜的内容，图片已混淆。如需查看：将该图片转发到与机器人的私聊，随消息发送「解混淆 ${token}」即可还原（群里直接发 token 无效）。').description('图片混淆提示文案（占位 ${token}）'),
+    videoCardHint: Schema.string().role('textarea').default('检测到受限视频，未在群内发送。原视频暂存至 ${until}，私聊发送「取视频 ${token}」领取。').description('受限视频卡片提示文案（占位 ${token} ${until} ${ttl}）'),
   }).description('处理策略'),
+
+  nsfwGlobalMode: modeUnion.default('off').description('全平台一刀切模式：off=全部关闭（默认）；full/smart 对所有未显式配置的平台生效（平台级可单独覆盖）'),
 
   nsfwPlatformMode: platformModeObject(),
 
@@ -66,6 +75,7 @@ export const NsfwConfig = Schema.object({
       Schema.const('yidun' as const).description('网易易盾'),
       Schema.const('aliyun' as const).description('阿里云'),
       Schema.const('tencent' as const).description('腾讯云'),
+      Schema.const('azure' as const).description('Azure Content Safety'),
       Schema.const('custom' as const).description('自定义 REST 模板'),
     ]).default('baidu').description('内容安全平台（配置有效凭证后启用；启用后平台全量模式自动转为审核判定）'),
     baidu: Schema.object({
@@ -84,6 +94,10 @@ export const NsfwConfig = Schema.object({
       secretId: Schema.string().role('secret').default('').description('SecretId'),
       secretKey: Schema.string().role('secret').default('').description('SecretKey'),
     }).description('腾讯云凭证'),
+    azure: Schema.object({
+      endpoint: Schema.string().default('').description('资源地址，如 https://<resource>.cognitiveservices.azure.com'),
+      apiKey: Schema.string().role('secret').default('').description('Ocp-Apim-Subscription-Key 密钥'),
+    }).description('Azure Content Safety 凭证'),
     custom: Schema.object({
       endpoint: Schema.string().default('').description('审核接口地址'),
       method: Schema.union([Schema.const('GET' as const), Schema.const('POST' as const)]).default('POST').description('请求方法'),

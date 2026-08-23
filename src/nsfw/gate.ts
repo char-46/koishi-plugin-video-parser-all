@@ -57,23 +57,31 @@ export function getModerationProvider(rt: ParserRuntime): ModerationProvider | n
   return providerCache.get(rt)
 }
 
-/** 解析平台最终策略（高级覆盖 > 简洁表；配 provider 时 smart 优先于 full） */
+/** 解析平台最终策略：高级显式覆盖 > 平台级显式（inherit 跟随全局）> 全局一刀切；
+ *  配置审核 Provider 时，非高级显式的 full 自动转 smart（高级模式显式 full 视为专家意图，保留一刀切） */
 export function resolvePolicy(rt: ParserRuntime, platform: string): ResolvedPolicy {
   const nsfw = rt.config.nsfwPolicy || {}
+  const platformVal = rt.config.nsfwPlatformMode?.[platform]
+  const globalMode = rt.config.nsfwGlobalMode || 'off'
+  let mode: PlatformMode = platformVal && platformVal !== 'inherit' ? platformVal : globalMode
   const policy: ResolvedPolicy = {
-    mode: rt.config.nsfwPlatformMode?.[platform] || 'off',
+    mode,
     imageAction: nsfw.imageAction || 'scramble',
     videoAction: nsfw.videoAction || 'redeem',
   }
+  let advancedFull = false
   if (rt.config.nsfwAdvancedPolicy) {
     const adv: AdvancedPolicyEntry | undefined = (rt.config.nsfwPlatformPolicyAdvanced || []).find((p: any) => p.platform === platform)
     if (adv) {
-      if (adv.mode) policy.mode = adv.mode
+      if (adv.mode) {
+        policy.mode = adv.mode
+        advancedFull = adv.mode === 'full'
+      }
       if (adv.imageAction) policy.imageAction = adv.imageAction
       if (adv.videoAction) policy.videoAction = adv.videoAction
     }
   }
-  if (policy.mode === 'full' && getModerationProvider(rt)) policy.mode = 'smart'
+  if (policy.mode === 'full' && getModerationProvider(rt) && !advancedFull) policy.mode = 'smart'
   return policy
 }
 

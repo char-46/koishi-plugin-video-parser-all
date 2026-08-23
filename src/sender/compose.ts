@@ -64,7 +64,7 @@ export function canSingle(rt: ParserRuntime, item: ProcessedItem): boolean {
   return true
 }
 
-/** 混淆提示文字（图片 token / 视频 token / 两者） */
+/** 混淆提示文字（图片 token / 视频 token + 暂存绝对时间） */
 export function buildTokenHint(rt: ParserRuntime, item: ProcessedItem): string {
   const nsfw = rt.config.nsfwPolicy || {}
   const lines: string[] = []
@@ -73,8 +73,13 @@ export function buildTokenHint(rt: ParserRuntime, item: ProcessedItem): string {
     lines.push(String(nsfw.tokenHintText || '').replace(/\$\{token\}/g, imgToken))
   }
   if (item.video.kind === 'card' && item.video.token) {
-    const ttl = (rt.config.nsfwVault?.ttlMinutes) || 30
-    lines.push(String(nsfw.videoCardHint || '').replace(/\$\{token\}/g, item.video.token).replace(/\$\{ttl\}/g, String(ttl)))
+    const ttl = rt.config.nsfwVault?.ttlMinutes || 30
+    const until = new Date(Date.now() + ttl * 60000)
+    const untilStr = `${String(until.getHours()).padStart(2, '0')}:${String(until.getMinutes()).padStart(2, '0')}`
+    lines.push(String(nsfw.videoCardHint || '')
+      .replace(/\$\{token\}/g, item.video.token)
+      .replace(/\$\{until\}/g, untilStr)
+      .replace(/\$\{ttl\}/g, String(ttl)))
   } else if (item.video.kind === 'link' && item.video.url) {
     lines.push(`检测到受限视频，未在群内发送。视频链接：${item.video.url}`)
   } else if (item.video.kind === 'drop' && item.parsed.video) {

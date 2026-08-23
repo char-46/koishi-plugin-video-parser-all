@@ -41,10 +41,46 @@ function rtWith(overrides: any = {}, opts: { ferret?: boolean; moderation?: any 
 }
 
 describe('nsfw/gate — 策略解析', () => {
-  it('默认：任何平台 off', () => {
+  it('默认：全局 off（一刀切默认关闭）', () => {
     const rt = rtWith()
     expect(resolvePolicy(rt, 'douyin').mode).toBe('off')
     expect(resolvePolicy(rt, 'twitter').mode).toBe('off')
+  })
+
+  it('全局一刀切：nsfwGlobalMode=full 对所有平台生效；平台显式配置可覆盖', () => {
+    const rt = rtWith({ raw: { nsfwGlobalMode: 'full' } })
+    expect(resolvePolicy(rt, 'douyin').mode).toBe('full')
+    expect(resolvePolicy(rt, 'twitter').mode).toBe('full')
+    expect(resolvePolicy(rt, 'weibo').mode).toBe('full')
+    // 平台显式 off 覆盖全局
+    const rt2 = rtWith({ nsfwPlatformMode: { douyin: 'off' }, raw: { nsfwGlobalMode: 'full' } })
+    expect(resolvePolicy(rt2, 'douyin').mode).toBe('off')
+    expect(resolvePolicy(rt2, 'weibo').mode).toBe('full')
+  })
+
+  it('全局 full + 配置审核 → 全部自动转 smart', () => {
+    const rt = rtWith({
+      raw: { nsfwGlobalMode: 'full' },
+      nsfwModeration: { provider: 'custom', custom: { endpoint: 'https://m.x' } },
+    })
+    expect(resolvePolicy(rt, 'douyin').mode).toBe('smart')
+  })
+
+  it('高级模式显式 full：配了审核也保留一刀切（专家意图）', () => {
+    const rt = rtWith({
+      nsfwAdvancedPolicy: true,
+      nsfwPlatformPolicyAdvanced: [{ platform: 'douyin', mode: 'full' }],
+      nsfwModeration: { provider: 'custom', custom: { endpoint: 'https://m.x' } },
+    })
+    expect(resolvePolicy(rt, 'douyin').mode).toBe('full')
+    // 其他平台仍遵循 自动转 smart 规则
+    const rt2 = rtWith({
+      nsfwPlatformMode: { weibo: 'full' },
+      nsfwAdvancedPolicy: true,
+      nsfwPlatformPolicyAdvanced: [{ platform: 'douyin', mode: 'full' }],
+      nsfwModeration: { provider: 'custom', custom: { endpoint: 'https://m.x' } },
+    })
+    expect(resolvePolicy(rt2, 'weibo').mode).toBe('smart')
   })
 
   it('简洁模式：平台 full；配置审核后自动转 smart', () => {
@@ -179,5 +215,39 @@ describe('nsfw/vault', () => {
     expect(service.decodeToken(token)).toMatch(/^[0-9a-f]{32}$/)
     expect(seed).toBe(12345) // stub seedFrom
     expect(makeScrambleToken(service).token).not.toBe(token) // 随机
+  })
+})
+
+describe('compose — 提示文案', () => {
+  it('videoCardHint 支持 ${until} 绝对时间与 ${ttl} 分钟', async () => {
+    const { buildTokenHint } = await import('../src/sender/compose')
+    const rt = rtWith({
+      nsfwPolicy: { videoCardHint: '原视频暂存至 ${until}（${ttl} 分钟），私聊「取视频 ${token}」领取' },
+    })
+    const item = {
+      text: '', parsed: {} as any, images: [],
+      avatar: { kind: 'raw' as const }, cover: null,
+      video: { kind: 'card' as const, token: 'tok123' },
+      scrambleTokens: [],
+    }
+    const hint = buildTokenHint(rt, item as any)
+    expect(hint).toContain('暂存至 ')
+    expect(hint).toMatch(/\d{2}:\d{2}/)          // 绝对时间 HH:mm
+    expect(hint).toContain('30 分钟')            // ttl 占位
+    expect(hint).toContain('tok123')
+  })
+
+  it('tokenHintText：默认引导私聊解码（群内直接发 token 无效）', async () => {
+    const { buildTokenHint } = await import('../src/sender/compose')
+    const rt = rtWith({
+      nsfwPolicy: { tokenHintText: '图片已混淆，私聊发送「解混淆 ${token}」并附图还原' },
+    })
+    const item = {
+      text: '', parsed: {} as any, images: [],
+      avatar: { kind: 'raw' as const }, cover: null,
+      video: { kind: 'raw' as const, url: '' },
+      scrambleTokens: ['abc'],
+    }
+    expect(buildTokenHint(rt, item as any)).toContain('解混淆 abc')
   })
 })
