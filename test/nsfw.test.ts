@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { resolvePolicy, processImage, processVideo, getModerationProvider } from '../src/nsfw/gate'
-import { VideoVault } from '../src/nsfw/vault'
-import { makeScrambleToken, getFerret } from '../src/nsfw/scramble'
+import { resolvePolicy, processImage, processVideo, getModerationProvider } from '../src/services/nsfw/gate'
+import { VideoVault } from '../src/services/nsfw/vault'
+import { makeScrambleToken, getFerret } from '../src/services/nsfw/scramble'
 import { makeRuntime } from './helpers'
 import { randomBytes } from 'crypto'
 
@@ -178,7 +178,7 @@ describe('nsfw/gate — processVideo', () => {
     expect(r.kind).toBe('card')
     expect(r.token).toBeTruthy()
     // token 绑定请求者
-    const { videoVault } = await import('../src/nsfw/vault')
+    const { videoVault } = await import('../src/services/nsfw/vault')
     expect(videoVault.redeem(r.token!, 'u1').ok).toBe(true)
     expect(videoVault.redeem(r.token!, 'u2').ok).toBe(false)
     videoVault.clear()

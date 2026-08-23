@@ -8,7 +8,7 @@ import { sendWithTimeout } from './sender'
 import { delay } from '../utils/common'
 import { debugLog } from '../utils/logger'
 import { buildTokenHint, hasScrambled, type ProcessedItem } from './compose'
-import type { ImageOutcome } from '../nsfw/gate'
+import type { ImageOutcome } from '../services/nsfw/gate'
 
 export function buildForwardNode(session: any, content: any, botName: string) {
   let messageContent: any[]

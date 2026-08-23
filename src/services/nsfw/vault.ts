@@ -6,7 +6,7 @@
  * 插件卸载即清空，不落盘。
  */
 import { randomBytes } from 'crypto'
-import { debugLog } from '../utils/logger'
+import { debugLog } from '../../utils/logger'
 
 export interface VaultEntry {
   requesterId: string

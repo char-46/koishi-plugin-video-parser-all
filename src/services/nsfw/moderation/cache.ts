@@ -2,7 +2,7 @@
  * 审核结果缓存：同图（URL+内容哈希）在 TTL 内不重复送审，控制 API 计费。
  */
 import { createHash } from 'crypto'
-import { SimpleLRUCache } from '../../utils/cache'
+import { SimpleLRUCache } from '../../../utils/cache'
 import type { CheckInput, CheckResult } from './types'
 
 const CACHE_TTL_MS = 30 * 60 * 1000

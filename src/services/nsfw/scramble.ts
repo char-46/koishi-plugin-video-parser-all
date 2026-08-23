@@ -6,8 +6,8 @@
  * 算法/token 协议由该服务保证，本插件不重复实现。
  */
 import { randomBytes } from 'crypto'
-import type { ParserRuntime } from '../runtime'
-import { debugLog } from '../utils/logger'
+import type { ParserRuntime } from '../../runtime'
+import { debugLog } from '../../utils/logger'
 
 /** ferret-transform 服务调用面（与 0.0.4 的 service.ts 对齐；仅类型，无运行时依赖） */
 export interface FerretTransformService {

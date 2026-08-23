@@ -1,5 +1,5 @@
 import { Schema } from 'koishi'
-import { NsfwConfig, SendStrategyConfig } from './nsfw/config'
+import { NsfwConfig, SendStrategyConfig } from './services/nsfw/config'
 
 export const name = 'video-parser-all'
 

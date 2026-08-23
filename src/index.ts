@@ -8,9 +8,9 @@ import { createRuntime } from './runtime'
 import { sendWithTimeout } from './sender/sender'
 import { flush } from './sender/flush'
 import { diagnoseTls } from './utils/tls-client'
-import { nsfwCapability } from './nsfw/gate'
-import { videoVault, configureVault } from './nsfw/vault'
-import { clearModerationCache } from './nsfw/moderation/cache'
+import { nsfwCapability } from './services/nsfw/gate'
+import { videoVault, configureVault } from './services/nsfw/vault'
+import { clearModerationCache } from './services/nsfw/moderation/cache'
 
 export { name, Config }
 

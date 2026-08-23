@@ -67,7 +67,7 @@ describe('flush + NSFW 端到端', () => {
     const texts = sentTexts(session._sent).join('\n')
     expect(texts).toContain('取视频')                            // token 提示
     // token 已入 vault 且绑定请求者
-    const { videoVault } = await import('../src/nsfw/vault')
+    const { videoVault } = await import('../src/services/nsfw/vault')
     expect(videoVault.size).toBeGreaterThanOrEqual(1)
     videoVault.clear()
   })

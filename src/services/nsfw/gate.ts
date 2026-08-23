@@ -12,8 +12,8 @@
  * - imageAction: scramble（混淆图+token）| link（只发链接文字）| drop（不发送）
  * - videoAction: redeem（暂存+私聊凭 token 取）| link（发原链接文字）| drop
  */
-import type { ParserRuntime } from '../runtime'
-import { debugLog } from '../utils/logger'
+import type { ParserRuntime } from '../../runtime'
+import { debugLog } from '../../utils/logger'
 import { createProvider, withFailClosed } from './moderation'
 import type { ModerationProvider } from './moderation'
 import { getFerret, scrambleImage } from './scramble'

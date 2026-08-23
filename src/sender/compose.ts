@@ -17,7 +17,7 @@ import type { ParsedData } from '../types'
 import { delay } from '../utils/common'
 import { debugLog } from '../utils/logger'
 import { sendWithTimeout } from './sender'
-import type { ImageOutcome, VideoOutcome } from '../nsfw/gate'
+import type { ImageOutcome, VideoOutcome } from '../services/nsfw/gate'
 
 export interface ProcessedItem {
   text: string

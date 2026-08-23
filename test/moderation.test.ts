@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { createHash, createHmac } from 'crypto'
-import { createProvider, withFailClosed, yidunSignature, aliyunSignature, percentEncode, tencentTc3Sign, getPath } from '../src/nsfw/moderation'
+import { createProvider, withFailClosed, yidunSignature, aliyunSignature, percentEncode, tencentTc3Sign, getPath } from '../src/services/nsfw/moderation'
 import type { AxiosInstance } from 'axios'
 
 const PNG1x1 = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')

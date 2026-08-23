@@ -5,7 +5,7 @@
  * 审核服务故障时按命中处理（宁可错杀，不放行）。结果经缓存去重。
  */
 import type { AxiosInstance } from 'axios'
-import { debugLog } from '../../utils/logger'
+import { debugLog } from '../../../utils/logger'
 import { getCached, setCached } from './cache'
 import { createBaiduProvider } from './baidu'
 import { createYidunProvider } from './yidun'
