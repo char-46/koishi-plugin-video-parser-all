@@ -80,6 +80,20 @@ describe('parseTwitter — X 原生 syndication 解析', () => {
     expect(t.images).toHaveLength(0)
   })
 
+  it('cleanDesc：清理 desc 中的 t.co 短链', async () => {
+    // 真实案例：推文末尾附带 t.co 缩短链接污染简介
+    const tcoTweet = {
+      __typename: 'Tweet',
+      text: '骚狗只配脱光衣服在地上爬行 https://t.co/5am26H14JA',
+      created_at: '2026-08-22T04:30:29.000Z',
+      favorite_count: 100,
+      user: { screen_name: 'test', name: 'T' },
+    }
+    const t = await parseTwitter('https://x.com/u/status/1234567890', mockHttp(tcoTweet))
+    expect(t.desc).toBe('骚狗只配脱光衣服在地上爬行')
+    expect(t.desc).not.toContain('t.co')
+  })
+
   it('非 X 链接抛出"无法提取 ID"', async () => {
     await expect(parseTwitter('https://example.com/no-id', mockHttp(photoTweet))).rejects.toThrow(/推文 ID/)
   })

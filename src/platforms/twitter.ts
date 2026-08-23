@@ -53,6 +53,16 @@ function pick(...vals: any[]): any {
   return ''
 }
 
+/** 清理描述中的 t.co 短链（Twitter 自动附加的截断 URL，无实际内容价值） */
+function cleanDesc(text: string): string {
+  if (!text) return text
+  // 移除末尾的 t.co URL（含可能的空格前导）
+  let cleaned = text.replace(/\s*https?:\/\/t\.co\/[A-Za-z0-9]+(?:\?[^\s]*)?\s*$/g, '').trim()
+  // 移除中间出现的 t.co URL（较少见，但推文内嵌的缩短链）
+  cleaned = cleaned.replace(/\s*https?:\/\/t\.co\/[A-Za-z0-9]+/g, ' ').replace(/\s{2,}/g, ' ').trim()
+  return cleaned || text
+}
+
 function baseParsed(): ParsedData {
   return {
     type: 'video', title: '', desc: '', author: '', uid: '', avatar: '', cover: '',
@@ -136,7 +146,7 @@ function mapSyndication(tw: any): ParsedData {
   p.type = p.video ? 'video' : (p.images.length ? 'image' : 'text')
 
   p.title = text.slice(0, 100)
-  p.desc = text
+  p.desc = cleanDesc(text)
   p.author = String(pick(user.name, user.screen_name, ''))
   p.uid = String(pick(user.screen_name, user.id_str, ''))
   p.avatar = String(pick(user.profile_image_url_https, user.profile_image_url, ''))
@@ -148,7 +158,6 @@ function mapSyndication(tw: any): ParsedData {
   if (tw.created_at) { const t = Date.parse(tw.created_at); if (!isNaN(t)) p.publishTime = t }
   p.author_followers = Number(pick(user.followers_count, 0)) || 0
   p.author_signature = String(pick(user.description, ''))
-  // title = desc 前 100 字截断 → 抑制 title（desc 为全集，完整保留）
   if (p.title && p.desc && p.desc.startsWith(p.title)) p.title = ''
   return p
 }
@@ -193,7 +202,7 @@ function mapGraphql(rawResult: any): ParsedData {
   p.type = p.video ? 'video' : (p.images.length ? 'image' : 'text')
 
   p.title = text.slice(0, 100)
-  p.desc = text
+  p.desc = cleanDesc(text)
   p.author = String(pick(ulegacy.name, ulegacy.screen_name, ''))
   p.uid = String(pick(ulegacy.screen_name, user?.rest_id, ''))
   p.avatar = String(pick(ulegacy.profile_image_url_https, ''))

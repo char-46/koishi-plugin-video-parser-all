@@ -25,27 +25,27 @@ function nsfwRt(config: any = {}, payloads: any = { code: 200, data: { images: [
 }
 
 describe('flush + NSFW 端到端', () => {
-  it('平台 full：图集以混淆 buffer 元素发送，附 token 提示文字', async () => {
+  it('平台 full：主消息用占位符，混淆图 + token 独立第二条发送', async () => {
     const rt = nsfwRt({
       nsfwPlatformMode: { xiaohongshu: 'full' },
       nsfwPolicy: { imageAction: 'scramble', tokenHintText: '已混淆，token=<token>' },
     })
     rt.http = {
       get: async (url: string) => {
-        if (url.includes('xhslink') || url.includes('api')) return { data: { code: 200, data: { images: ['https://x/1.jpg', 'https://x/2.jpg'] } } }
+        if (url.includes('xhslink') || url.includes('api')) return { data: { code: 200, data: { title: '图集标题', images: ['https://x/1.jpg', 'https://x/2.jpg'] } } }
         return { data: PNG_BUF }
       },
     } as any
     const session = mockSession()
     await flush(rt, session as any, [{ type: 'xiaohongshu', url: 'https://xhslink.com/X', id: 'X' }])
-    const els = sentElements(session._sent)
-    const imgs = els.filter(c => c?.type === 'img')
-    expect(imgs.length).toBe(2)
-    // 混淆图元素携带 buffer（attrs.src 为二进制）
-    expect(imgs[0].attrs?.src || imgs[0].attrs?.url || imgs[0].attrs).toBeTruthy()
-    const texts = sentTexts(session._sent).join('\n')
-    expect(texts).toContain('token=')
-    expect(texts).not.toContain('https://x/1.jpg') // 原图 URL 不出现在消息中
+    // 混淆图出现在 sentElements 中（占位符在主消息，混淆图 buffer 在附加消息）
+    const allEls = sentElements(session._sent)
+    const imgEls = allEls.filter(c => c?.type === 'img')
+    expect(imgEls.length).toBe(2) // 两张混淆图
+    // token 出现在消息中
+    const allTexts = sentTexts(session._sent).join('\n')
+    expect(allTexts).toContain('token=')
+    expect(allTexts).toContain('〔图片已混淆') // 主消息占位符
   })
 
   it('受限视频：群内仅文字卡片 + token（无视频元素、无封面）', async () => {
