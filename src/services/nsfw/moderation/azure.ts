@@ -30,10 +30,12 @@ export function createAzureProvider(conf: AzureConf, http: AxiosInstance): Moder
       const analysis = res.data?.categoriesAnalysis
       if (!Array.isArray(analysis) || !analysis.length) throw new Error('Azure 审核返回无判定结果')
       const hit = analysis.find((c: any) => Number(c.severity ?? 0) >= threshold)
+      const detail = analysis.map((c: any) => `${c.category || '?'}=${Number(c.severity ?? 0)}`).join(', ')
       return {
         nsfw: !!hit,
         label: hit ? String(hit.category || '') : '',
         score: hit ? Number(hit.severity) / 6 : undefined,
+        detail,
       }
     },
   }

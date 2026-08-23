@@ -14,6 +14,8 @@ export interface CheckResult {
   nsfw: boolean
   label: string
   score?: number
+  /** 各分类明细（如 "Sexual=4, Violence=0"），供 debug 日志展示 */
+  detail?: string
 }
 
 export interface ModerationProvider {

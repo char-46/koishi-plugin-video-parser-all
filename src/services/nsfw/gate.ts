@@ -100,7 +100,7 @@ async function moderateImage(rt: ParserRuntime, url: string): Promise<boolean> {
   try {
     const res = await rt.http.get(url, { responseType: 'arraybuffer', timeout: 30000 })
     const result = await provider.check({ url, buffer: Buffer.from(res.data) })
-    debugLog(`内容审核 ${result.nsfw ? '命中' : '通过'}（${result.label || 'clean'}）: ${url.slice(0, 60)}`)
+    debugLog(`内容审核 ${result.nsfw ? '命中' : '通过'}（${result.detail || result.label || 'clean'}）: ${url.slice(0, 60)}`)
     return result.nsfw
   } catch (e: any) {
     logger.warn(`送审图片下载失败（fail-closed 按命中）: ${e?.message || e}`)

@@ -82,6 +82,7 @@ describe('moderation — 各平台签名与判定', () => {
     const r = await p.check(input)
     expect(r.nsfw).toBe(true)
     expect(r.label).toBe('Sexual')
+    expect(r.detail).toBe('Sexual=4, Violence=0') // 各分类 severity 明细
     expect(calls[0].url).toContain('/contentsafety/image:analyze?api-version=2023-10-01')
     expect(calls[0].headers['Ocp-Apim-Subscription-Key']).toBe('k1')
     expect(calls[0].body.categories).toEqual(['Sexual', 'Violence']) // 默认类别
