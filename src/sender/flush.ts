@@ -21,7 +21,7 @@ import { processSingleUrl } from '../engine/fetcher'
 import { processImage, processVideo } from '../services/nsfw/gate'
 import type { ImageOutcome, VideoOutcome } from '../services/nsfw/gate'
 import { sendWithTimeout } from './sender'
-import { sendDecomposed, canSingle, type ProcessedItem } from './compose'
+import { sendSplit, sendSingle, type ProcessedItem } from './compose'
 import { sendForward } from './forward'
 
 export interface FlushOptions {
@@ -51,13 +51,7 @@ async function processItem(rt: ParserRuntime, session: any, platform: string, te
     ? await processVideo(rt, platform, parsed.video, parsed.cover || '', { title: parsed.title, author: parsed.author, requesterId })
     : { kind: 'raw' as const, url: '' }
 
-  // 计算发送模式：有混淆图或视频取件码 → decomposed（每个语义单元独立消息）
-  const hasScrambled = avatar.kind === 'scrambled'
-    || cover?.kind === 'scrambled'
-    || images.some(i => i.kind === 'scrambled')
-  const sendMode = (hasScrambled || video.kind === 'card') ? 'decomposed' as const : 'integrated' as const
-
-  return { text, parsed, images, avatar, cover, video, sendMode }
+  return { text, parsed, images, avatar, cover, video }
 }
 
 export async function flush(rt: ParserRuntime, session: any, matches: LinkMatch[], opts: FlushOptions = {}) {
@@ -135,18 +129,14 @@ export async function flush(rt: ParserRuntime, session: any, matches: LinkMatch[
   }
 
   if (config.sendStrategy === 'split') {
-    for (const item of items) await sendDecomposed(rt, session, item, { quoteId: session?.messageId })
+    for (const item of items) await sendSplit(rt, session, item, { quoteId: session?.messageId })
     debugLog('INFO', '处理完成（逐条）')
     return
   }
 
-  // single（默认）：integrated 模式尝试单条发送，decomposed 模式直接分条
+  // single（默认）：单条整合；混淆图/视频取件码作为例外独立发送
   for (const item of items) {
-    if (canSingle(rt, item)) {
-      await sendDecomposed(rt, session, item, { quoteId: session?.messageId })
-    } else {
-      await sendDecomposed(rt, session, item, { quoteId: session?.messageId })
-    }
+    await sendSingle(rt, session, item, { quoteId: session?.messageId })
   }
   debugLog('INFO', '处理完成')
 }

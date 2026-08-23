@@ -1,14 +1,14 @@
 /**
- * 合并转发模式：每个 item 构建合并转发节点（转发气泡）。
- * 混淆内容占位符 + 独立 hint 节点 + 独立图片节点（与 compose.ts 分解发送一致）。
+ * 合并转发模式：每个 item 的语义单元构建为合并转发节点（转发气泡）。
+ * 单元来自 compose.buildUnits（混淆图 / 取件码同样作为独立气泡）。
+ * 仅一个节点时不打包转发卡片，直接发送。
  */
 import { h } from 'koishi'
 import type { ParserRuntime } from '../runtime'
 import { sendWithTimeout } from './sender'
 import { delay } from '../utils/common'
 import { debugLog } from '../utils/logger'
-import { buildImageHint, buildVideoHint, type ProcessedItem } from './compose'
-import type { ImageOutcome } from '../services/nsfw/gate'
+import { buildUnits, type ProcessedItem } from './compose'
 
 export function buildForwardNode(session: any, content: any, botName: string) {
   let messageContent: any[]
@@ -16,13 +16,6 @@ export function buildForwardNode(session: any, content: any, botName: string) {
   else if (content && typeof content === 'object' && content.type) messageContent = [content]
   else messageContent = [h.text(String(content))]
   return h('node', { user: { nickname: botName.substring(0, 15), user_id: session.selfId } }, messageContent)
-}
-
-function imageNode(img: ImageOutcome): h | null {
-  if (img.kind === 'drop') return null
-  if (img.kind === 'raw' && img.url) return h.image(img.url)
-  if (img.kind === 'link' && img.url) return h.text(`图片链接：${img.url}`)
-  return null
 }
 
 export async function sendForward(rt: ParserRuntime, session: any, items: ProcessedItem[]): Promise<void> {
@@ -33,46 +26,23 @@ export async function sendForward(rt: ParserRuntime, session: any, items: Proces
 
   for (let i = 0; i < total; i++) {
     const item = items[i]
-    const p = item.parsed
-
-    const withIndex = (s: string) => (total > 1 ? `【${i + 1}/${total}】\n${s}` : s)
-    let text = withIndex(item.text)
-    if (config.showAuthorAvatar && p.avatar && item.avatar.kind !== 'drop' && config.showAuthorAvatarText) {
-      text = text ? text + '\n' + (config.authorAvatarText || '作者头像：') : (config.authorAvatarText || '作者头像：')
-    }
-    if (text && config.showImageText) nodes.push(buildForwardNode(session, text, botName))
-
-    const handleImg = (img: ImageOutcome) => {
-      if (img.kind === 'drop') return
-      if (img.kind === 'scrambled' && img.buffer) {
-        // 混淆图：一个 node = 解混淆提示 + 密钥 + 混淆图（转发即可私聊解码）
-        const parts: any[] = []
-        if (img.token) parts.push(h.text(buildImageHint(rt, img.token)))
-        parts.push(h.image(img.buffer, 'image/png'))
-        nodes.push(buildForwardNode(session, parts, botName))
-        return
+    const units = buildUnits(rt, item)
+    // 多 item 时给概述文字加序号前缀
+    if (total > 1) {
+      for (const u of units) {
+        const txt = u.content.find((e: any) => e.type === 'text')
+        if (txt) { txt.attrs = { ...txt.attrs, content: `【${i + 1}/${total}】\n${txt.attrs?.content ?? ''}` }; break }
       }
-      const n = imageNode(img)
-      if (n) nodes.push(buildForwardNode(session, n, botName))
     }
+    for (const u of units) nodes.push(buildForwardNode(session, u.content, botName))
+  }
 
-    if (config.showAuthorAvatar && p.avatar && item.avatar.kind !== 'drop') handleImg(item.avatar)
-    if (item.cover && p.cover && config.showCoverImage && p.type !== 'live_photo' && p.type !== 'image' && p.type !== 'live') {
-      if (config.showCoverText) nodes.push(buildForwardNode(session, config.coverText || '封面：', botName))
-      handleImg(item.cover)
-    }
-    if (config.showMusicCover && p.music.cover) nodes.push(buildForwardNode(session, h.image(p.music.cover), botName))
-    for (const img of item.images) handleImg(img)
-    if (p.video && p.type !== 'live' && p.type !== 'live_photo' && item.video.kind === 'raw' && item.video.url) {
-      nodes.push(buildForwardNode(session, h.video(item.video.url), botName))
-    }
-    if (config.showMusicVoice && p.music.url) nodes.push(buildForwardNode(session, h.audio(p.music.url), botName))
-
-    // 视频取件提示独立气泡（仅 decomposed 模式）
-    if (item.sendMode === 'decomposed') {
-      const hint = buildVideoHint(rt, item)
-      if (hint) nodes.push(buildForwardNode(session, hint, botName))
-    }
+  // 仅一条消息：直接发送，不打包转发卡片
+  if (nodes.length === 1) {
+    const single = nodes[0]
+    const content = Array.isArray(single.children) ? single.children : [single.children]
+    await sendWithTimeout(rt, session, content, config.retryTimes)
+    return
   }
 
   const MAX_NODES = 50
@@ -83,10 +53,11 @@ export async function sendForward(rt: ParserRuntime, session: any, items: Proces
     } catch (err) {
       debugLog('ERROR', '合并转发失败，降级逐条发送:', err)
       for (const item of items) {
-        await sendWithTimeout(rt, session, item.text || '').catch(() => {})
-        const hint = buildVideoHint(rt, item)
-        if (hint) await sendWithTimeout(rt, session, hint).catch(() => {})
-        await delay(300)
+        const units = buildUnits(rt, item)
+        for (const u of units) {
+          await sendWithTimeout(rt, session, u.content).catch(() => {})
+          await delay(300)
+        }
       }
       return
     }
