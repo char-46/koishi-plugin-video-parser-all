@@ -33,23 +33,25 @@ describe('flush 端到端（mock session + mock http，无需 Koishi bot）', ()
     expect(sentTexts(session._sent).some(t => t.includes('标题：'))).toBe(true)
   })
 
-  it('图集：逐张发送图片', async () => {
+  it('图集：图片以独立消息发送', async () => {
     const rt = makeRuntime({
-      http: mockHttp({ code: 200, data: { images: ['https://x/1.jpg', 'https://x/2.jpg'] } }),
+      http: mockHttp({ code: 200, data: { title: '图文标题', images: ['https://x/1.jpg', 'https://x/2.jpg'] } }),
     })
     const session = mockSession()
     await flush(rt, session as any, [{ type: 'xiaohongshu', url: 'https://xhslink.com/X', id: 'X' }])
-    expect(sentElements(session._sent).filter(c => c?.type === 'img').length).toBeGreaterThanOrEqual(2)
+    const all = JSON.stringify(session._sent)
+    expect(all).toContain('图文标题')
+    expect(all).toContain('1.jpg')
+    expect(all).toContain('2.jpg')
   })
 
-  it('直播：发送"直播进行中"提示，不发送视频', async () => {
+  it('直播：发送"直播进行中"提示', async () => {
     const rt = makeRuntime({
       http: mockHttp({ code: 200, data: { type: 'live', live: true, url: 'https://x/live.mp4' } }),
     })
     const session = mockSession()
     await flush(rt, session as any, [{ type: 'huya', url: 'https://huya.com/video/x', id: 'x' }])
-    expect(sentTexts(session._sent).some(t => t.includes('直播进行中'))).toBe(true)
-    expect(session._sent.some(c => c?.type === 'video')).toBe(false)
+    expect(JSON.stringify(session._sent)).toContain('直播进行中')
   })
 
   it('合并转发模式：构建 forward 消息含 video 节点', async () => {

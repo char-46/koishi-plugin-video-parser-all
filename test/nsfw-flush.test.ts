@@ -123,15 +123,15 @@ describe('flush + NSFW 端到端', () => {
     delete (rt.ctx as any)['ferret-transform']
     rt.http = {
       get: async (url: string) => {
-        if (url.includes('xhslink') || url.includes('api')) return { data: { code: 200, data: { images: ['https://x/1.jpg'] } } }
+        if (url.includes('xhslink') || url.includes('api')) return { data: { code: 200, data: { title: '图文', images: ['https://x/1.jpg'] } } }
         return { data: PNG_BUF }
       },
     } as any
     const session = mockSession()
     await flush(rt, session as any, [{ type: 'xiaohongshu', url: 'https://xhslink.com/X', id: 'X' }])
+    const allTexts = sentTexts(session._sent).join('\n')
+    expect(allTexts).toContain('https://x/1.jpg')                // 链接文字
     const els = sentElements(session._sent)
-    expect(els.filter(c => c?.type === 'img').length).toBe(0) // 无图片元素
-    const texts = sentTexts(session._sent).join('\n')
-    expect(texts).toContain('https://x/1.jpg')                // 链接文字
+    expect(els.filter(c => c?.type === 'img').length).toBe(0)    // 无图片元素
   })
 })

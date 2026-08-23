@@ -21,8 +21,7 @@ import { processSingleUrl } from '../engine/fetcher'
 import { processImage, processVideo } from '../nsfw/gate'
 import type { ImageOutcome, VideoOutcome } from '../nsfw/gate'
 import { sendWithTimeout } from './sender'
-import { sendSingle, buildTokenHint, canSingle, type ProcessedItem } from './compose'
-import { sendSplit } from './split'
+import { sendDecomposed, sendSplit, buildTokenHint, canSingle, type ProcessedItem } from './compose'
 import { sendForward } from './forward'
 
 export interface FlushOptions {
@@ -140,10 +139,13 @@ export async function flush(rt: ParserRuntime, session: any, matches: LinkMatch[
     return
   }
 
-  // single（默认）：单条整合，失败降级 split（转发不可用）
+  // single（默认）：单条整合（compact），有混淆时按分解发送；失败降级 split
   for (const item of items) {
-    const ok = canSingle(rt, item) ? await sendSingle(rt, session, item, session?.messageId) : false
-    if (!ok) await sendSplit(rt, session, item, buildTokenHint(rt, item))
+    if (canSingle(rt, item)) {
+      await sendDecomposed(rt, session, item, { quoteId: session?.messageId, compact: true })
+    } else {
+      await sendDecomposed(rt, session, item, { quoteId: session?.messageId, compact: false })
+    }
   }
   debugLog('INFO', '处理完成')
 }

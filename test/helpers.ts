@@ -83,14 +83,18 @@ export function makeRuntime(opts: { config?: any; http?: any } = {}): ParserRunt
   return rt
 }
 
-/** 从收集到的发送内容中提取文本（h 元素或纯文本） */
+/** 从收集到的发送内容中提取文本（h 元素或纯文本；自动展开数组） */
 export function sentTexts(sent: any[]): string[] {
-  return sent.map(c => {
-    if (c == null) return ''
-    if (typeof c === 'string') return c
-    if (c.type === 'text') return c.attrs?.content ?? ''
-    return c.type ? `<${c.type}>` : JSON.stringify(c)
-  })
+  const out: string[] = []
+  const walk = (c: any) => {
+    if (c == null) return
+    if (Array.isArray(c)) { c.forEach(walk); return }
+    if (typeof c === 'string') { out.push(c); return }
+    if (c.type === 'text') { out.push(c.attrs?.content ?? ''); return }
+    out.push(c.type ? `<${c.type}>` : JSON.stringify(c))
+  }
+  sent.forEach(walk)
+  return out
 }
 
 /** 递归展开发送内容（元素数组/合并转发节点），提取全部 h 元素 */

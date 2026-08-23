@@ -1,10 +1,13 @@
+/**
+ * 合并转发模式：每个 item 构建合并转发节点（转发气泡）。
+ * 混淆内容占位符 + 独立 hint 节点 + 独立图片节点（与 compose.ts 分解发送一致）。
+ */
 import { h } from 'koishi'
 import type { ParserRuntime } from '../runtime'
-import { sendWithTimeout, sendMedia } from './sender'
+import { sendWithTimeout } from './sender'
 import { delay } from '../utils/common'
 import { debugLog } from '../utils/logger'
-import type { ProcessedItem } from './compose'
-import { buildTokenHint } from './compose'
+import { buildTokenHint, hasScrambled, type ProcessedItem } from './compose'
 import type { ImageOutcome } from '../nsfw/gate'
 
 export function buildForwardNode(session: any, content: any, botName: string) {
@@ -18,13 +21,11 @@ export function buildForwardNode(session: any, content: any, botName: string) {
 function imageNode(img: ImageOutcome, placeholderIndex?: { n: number }): h | null {
   if (img.kind === 'drop') return null
   if (img.kind === 'scrambled' && placeholderIndex) { placeholderIndex.n++; return h.text(`〔图片已混淆 ${placeholderIndex.n}〕`) }
-  if (img.kind === 'scrambled' && img.buffer) return h.image(img.buffer, 'image/png') // fallback 无占位符
   if (img.kind === 'raw' && img.url) return h.image(img.url)
   if (img.kind === 'link' && img.url) return h.text(`图片链接：${img.url}`)
   return null
 }
 
-/** 合并转发模式（消费 gate 处理后的 item） */
 export async function sendForward(rt: ParserRuntime, session: any, items: ProcessedItem[]): Promise<void> {
   const { config } = rt
   const botName = config.botName || '视频解析机器人'
@@ -34,8 +35,8 @@ export async function sendForward(rt: ParserRuntime, session: any, items: Proces
   for (let i = 0; i < total; i++) {
     const item = items[i]
     const p = item.parsed
-    const idx = { n: 0 } // 占位符序号（同一 item 内递增）
-    const scrambledBuffers: Buffer[] = []
+    const idx = { n: 0 }
+    const scrambledBufs: Buffer[] = []
 
     const withIndex = (s: string) => (total > 1 ? `【${i + 1}/${total}】\n${s}` : s)
     let text = withIndex(item.text)
@@ -46,7 +47,12 @@ export async function sendForward(rt: ParserRuntime, session: any, items: Proces
 
     const handleImg = (img: ImageOutcome) => {
       if (img.kind === 'drop') return
-      if (img.kind === 'scrambled' && img.buffer) { idx.n++; scrambledBuffers.push(img.buffer); nodes.push(buildForwardNode(session, `〔图片已混淆 ${idx.n}〕`, botName)); return }
+      if (img.kind === 'scrambled' && img.buffer) {
+        idx.n++
+        scrambledBufs.push(img.buffer)
+        nodes.push(buildForwardNode(session, `〔图片已混淆 ${idx.n}〕`, botName))
+        return
+      }
       const n = imageNode(img)
       if (n) nodes.push(buildForwardNode(session, n, botName))
     }
@@ -63,13 +69,14 @@ export async function sendForward(rt: ParserRuntime, session: any, items: Proces
     }
     if (config.showMusicVoice && p.music.url) nodes.push(buildForwardNode(session, h.audio(p.music.url), botName))
 
-    // 混淆附加：hint 文字与混淆图拆成两个独立气泡（兼容各类适配器）
+    // 混淆 hint 独立气泡
     const hint = buildTokenHint(rt, item)
-    if (hint) {
-      nodes.push(buildForwardNode(session, hint, botName))
-    }
-    if (scrambledBuffers.length) {
-      nodes.push(buildForwardNode(session, scrambledBuffers.map((buf) => h.image(buf, 'image/png')), botName))
+    if (hint) nodes.push(buildForwardNode(session, hint, botName))
+    // 混淆图独立气泡（每张图在转发里是一个 node，群友可逐张保存转发）
+    if (scrambledBufs.length) {
+      for (const buf of scrambledBufs) {
+        nodes.push(buildForwardNode(session, h.image(buf, 'image/png'), botName))
+      }
     }
   }
 
@@ -81,7 +88,6 @@ export async function sendForward(rt: ParserRuntime, session: any, items: Proces
     } catch (err) {
       debugLog('ERROR', '合并转发失败，降级逐条发送:', err)
       for (const item of items) {
-        // 降级：仅发文字与媒体链接，避免逐条重发全部媒体造成刷屏
         await sendWithTimeout(rt, session, item.text || '').catch(() => {})
         const hint = buildTokenHint(rt, item)
         if (hint) await sendWithTimeout(rt, session, hint).catch(() => {})
@@ -92,5 +98,4 @@ export async function sendForward(rt: ParserRuntime, session: any, items: Proces
   }
 }
 
-/** 保留旧导出（sendMedia 引用兼容） */
-export { sendMedia }
+export { sendMedia } from './sender'
