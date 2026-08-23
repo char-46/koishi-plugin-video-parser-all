@@ -14,7 +14,7 @@
 import type { ParserRuntime } from '../runtime'
 import type { LinkMatch } from '../types'
 import { ConcurrencyLimiter } from '../utils/concurrency'
-import { debugLog } from '../utils/logger'
+import { debugLog, logger } from '../utils/logger'
 import { contentFingerprint, getText } from '../utils/common'
 import { getPlatformConfig } from '../platforms/custom'
 import { processSingleUrl } from '../engine/fetcher'
@@ -56,7 +56,7 @@ async function processItem(rt: ParserRuntime, session: any, platform: string, te
 
 export async function flush(rt: ParserRuntime, session: any, matches: LinkMatch[], opts: FlushOptions = {}) {
   const { config, dedupCache, contentDedupCache } = rt
-  debugLog('INFO', `开始解析 ${matches.length} 个链接`)
+  debugLog(`开始解析 ${matches.length} 个链接`)
   const items: ProcessedItem[] = []
   const errors: string[] = []
   const limiter = new ConcurrencyLimiter(config.maxConcurrent || 3)
@@ -75,7 +75,7 @@ export async function flush(rt: ParserRuntime, session: any, matches: LinkMatch[
     try {
       const platformEnabled = config.platformEnabled?.[match.type] ?? true
       if (!platformEnabled && !match.type.startsWith('custom_')) {
-        debugLog('INFO', `平台 ${match.type} 已禁用，跳过链接: ${match.url}`)
+        debugLog(`平台 ${match.type} 已禁用，跳过链接: ${match.url}`)
         return
       }
       const dedupEnabled = !opts.skipDedup && config.enableDeduplication !== false && config.deduplicationInterval > 0
@@ -83,14 +83,14 @@ export async function flush(rt: ParserRuntime, session: any, matches: LinkMatch[
       if (dedupEnabled) {
         const lastTime = dedupCache.get(scopeKey)
         if (lastTime && (Date.now() - lastTime < config.deduplicationInterval * 1000)) {
-          debugLog('INFO', `跳过重复链接: ${match.url}`)
+          debugLog(`跳过重复链接: ${match.url}`)
           const shortUrl = match.url.length > 80 ? match.url.slice(0, 80) + '...' : match.url
           const tip = getText(config, 'deduplicationTipText').replace(/\$\{url\}/g, shortUrl).replace(/\$\{interval\}/g, String(config.deduplicationInterval))
           await sendWithTimeout(rt, session, tip).catch(() => {})
           return
         }
       }
-      debugLog('INFO', `解析链接: ${match.url} (${match.type})`)
+      logger.info(`解析链接: ${match.url} (${match.type})`)
       const platformConf = getPlatformConfig(rt, match.type)
       const result = await processSingleUrl(rt, match.url, match.type, platformConf.fieldMapping, platformConf)
       if (result.success) {
@@ -99,7 +99,7 @@ export async function flush(rt: ParserRuntime, session: any, matches: LinkMatch[
           const fp = dedupScopeKey(session, contentFingerprint(result.data.parsed))
           const lastDedup = contentDedupCache.get(fp)
           if (lastDedup && (Date.now() - lastDedup < config.deduplicationInterval * 1000)) {
-            debugLog('INFO', `跳过重复内容: ${match.url}`)
+            debugLog(`跳过重复内容: ${match.url}`)
             return
           }
           contentDedupCache.set(fp, Date.now())
@@ -124,13 +124,11 @@ export async function flush(rt: ParserRuntime, session: any, matches: LinkMatch[
 
   if (forwardAllowed) {
     await sendForward(rt, session, items)
-    debugLog('INFO', '处理完成（合并转发）')
     return
   }
 
   if (config.sendStrategy === 'split') {
     for (const item of items) await sendSplit(rt, session, item, { quoteId: session?.messageId })
-    debugLog('INFO', '处理完成（逐条）')
     return
   }
 
@@ -138,5 +136,4 @@ export async function flush(rt: ParserRuntime, session: any, matches: LinkMatch[
   for (const item of items) {
     await sendSingle(rt, session, item, { quoteId: session?.messageId })
   }
-  debugLog('INFO', '处理完成')
 }

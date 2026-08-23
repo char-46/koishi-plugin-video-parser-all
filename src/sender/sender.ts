@@ -1,6 +1,6 @@
 import { h } from 'koishi'
 import type { ParserRuntime } from '../runtime'
-import { debugLog } from '../utils/logger'
+import { logger } from '../utils/logger'
 import { delay, getErrorMessage } from '../utils/common'
 
 export async function sendWithTimeout(rt: ParserRuntime, session: any, content: any, customRetries?: number): Promise<any> {
@@ -18,7 +18,7 @@ export async function sendWithTimeout(rt: ParserRuntime, session: any, content: 
       }
     } catch (err) {
       const errMsg = getErrorMessage(err)
-      debugLog('ERROR', `发送失败尝试 ${attempt+1}: ${errMsg}`)
+      logger.error(`发送失败尝试 ${attempt+1}: ${errMsg}`)
       if (attempt < maxRetries) await delay(retryDelay)
       else if (!config.ignoreSendError) throw err
     }

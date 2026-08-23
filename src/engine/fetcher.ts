@@ -1,7 +1,7 @@
 import axios, { AxiosRequestConfig } from 'axios'
 import type { ParserRuntime } from '../runtime'
 import type { ParsedData, ApiItem } from '../types'
-import { debugLog } from '../utils/logger'
+import { debugLog, logger } from '../utils/logger'
 import { delay, getErrorMessage } from '../utils/common'
 import { generateFormattedText } from '../utils/format'
 import { parseApiResponse } from './parser'
@@ -19,7 +19,7 @@ export async function fetchApi(rt: ParserRuntime, url: string, type: string, fie
 
   // X / Twitter：统一网关均走原生 syndication 解析（除非用户自定义了 API）
   if (type === 'twitter' && !dedicatedUrl) {
-    debugLog('INFO', 'twitter 走原生 syndication 解析:', url)
+    logger.info('twitter 走原生 syndication 解析:', url)
     const twCreds = (config.twitterAuthToken && config.twitterCt0)
       ? { authToken: String(config.twitterAuthToken), ct0: String(config.twitterCt0) }
       : undefined
@@ -93,7 +93,7 @@ export async function fetchApi(rt: ParserRuntime, url: string, type: string, fie
         throw new Error(res.data?.msg || `API返回错误码: ${res.data?.code}`)
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error))
-        debugLog('ERROR', `${api.label} attempt ${attempt+1} failed: ${lastError.message}`)
+        debugLog(`${api.label} attempt ${attempt+1} failed: ${lastError.message}`)
         if (axios.isAxiosError(error)) {
           if (!error.response) {
             if (attempt < config.retryTimes) { await delay(config.retryInterval); continue }
@@ -106,7 +106,7 @@ export async function fetchApi(rt: ParserRuntime, url: string, type: string, fie
         break
       }
     }
-    debugLog('WARN', `${api.label} all retries failed`)
+    logger.warn(`${api.label} 全部重试失败`)
   }
   throw lastError || new Error('所有API请求全部失败')
 }
@@ -118,13 +118,13 @@ export async function parseUrl(rt: ParserRuntime, url: string, type: string, fie
     if (hasMedia) return { success: true, data: info }
     // 纯文字内容（如 X 纯文字推文）：有正文即视为成功，下游发送文字卡片
     if (info.type === 'text' && (info.title || info.desc)) {
-      debugLog('INFO', `纯文字内容: ${url}`)
+      debugLog(`纯文字内容: ${url}`)
       return { success: true, data: info }
     }
-    debugLog('WARN', `解析成功但无内容: ${url}`)
+    debugLog(`解析成功但无内容: ${url}`)
     return { success: false, msg: '解析接口返回空内容' }
   } catch (error) {
-    debugLog('ERROR', `解析失败: ${url}`, getErrorMessage(error))
+    logger.error(`解析失败: ${url}`, getErrorMessage(error))
     return { success: false, msg: getErrorMessage(error) }
   }
 }

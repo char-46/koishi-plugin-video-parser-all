@@ -9,7 +9,7 @@ import { h } from 'koishi'
 import type { ParserRuntime } from '../runtime'
 import { sendWithTimeout } from './sender'
 import { delay } from '../utils/common'
-import { debugLog } from '../utils/logger'
+import { debugLog, logger } from '../utils/logger'
 import { buildUnits, type ProcessedItem } from './compose'
 
 /** 一个转发气泡：<message><author>bot</author>…content…</message> */
@@ -57,7 +57,7 @@ export async function sendForward(rt: ParserRuntime, session: any, items: Proces
     try {
       await sendWithTimeout(rt, session, h('message', { forward: true }, batch), config.retryTimes)
     } catch (err) {
-      debugLog('ERROR', '合并转发失败，降级逐条发送:', err)
+      logger.error('合并转发失败，降级逐条发送:', err)
       for (const item of items) {
         for (const u of buildUnits(rt, item)) {
           await sendWithTimeout(rt, session, u.content).catch(() => {})

@@ -7,7 +7,7 @@
  */
 import { randomBytes } from 'crypto'
 import type { ParserRuntime } from '../../runtime'
-import { debugLog } from '../../utils/logger'
+import { logger } from '../../utils/logger'
 
 /** ferret-transform 服务调用面（与 0.0.4 的 service.ts 对齐；仅类型，无运行时依赖） */
 export interface FerretTransformService {
@@ -49,7 +49,7 @@ export async function scrambleImage(rt: ParserRuntime, url: string): Promise<Scr
     const scrambled = await service.scramble(buffer, { seed })
     return { ok: true, buffer: scrambled, token }
   } catch (e: any) {
-    debugLog('WARN', `图片混淆失败（${url.slice(0, 80)}）: ${e?.message || e}`)
+    logger.warn(`图片混淆失败（${url.slice(0, 80)}）: ${e?.message || e}`)
     return { ok: false, reason: 'transform-failed' }
   }
 }

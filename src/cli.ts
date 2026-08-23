@@ -9,7 +9,7 @@ import { createRuntime } from './runtime'
 import { getPlatformConfig } from './platforms/custom'
 import { parseUrl } from './engine/fetcher'
 import { generateFormattedText, formatDuration, formatPublishTime } from './utils/format'
-import { setDebugEnabled, debugLog } from './utils/logger'
+import { setVerboseLogging, debugLog } from './utils/logger'
 import { shutdownTlsClient } from './utils/tls-client'
 import type { Context } from 'koishi'
 import type { ParsedData } from './types'
@@ -227,7 +227,7 @@ async function downloadAll(p: ParsedData, type: string, outDir: string): Promise
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2))
-  if (args.debug) setDebugEnabled(true)
+  if (args.debug) setVerboseLogging(true)
   if (!args.url) { printHelp(); process.exit(1) }
 
   const matches = linkTypeParser(args.url, BUILTIN_LINK_RULES)
@@ -260,7 +260,7 @@ async function main(): Promise<void> {
       exitCode = 1
     } else {
       const parsed = result.data
-      debugLog('DEBUG', '解析结果', parsed)
+      debugLog('解析结果', parsed)
 
       if (args.json) {
         console.log(JSON.stringify(parsed, null, 2))

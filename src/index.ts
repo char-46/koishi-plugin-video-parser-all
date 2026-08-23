@@ -1,7 +1,7 @@
 import type { Context } from 'koishi'
 import { h } from 'koishi'
 import { name, Config } from './config'
-import { debugLog, setDebugEnabled } from './utils/logger'
+import { logger, debugLog, setVerboseLogging } from './utils/logger'
 import { getText } from './utils/common'
 import { linkTypeParser, extractAllUrlsFromMessage } from './utils/url'
 import { createRuntime } from './runtime'
@@ -20,8 +20,8 @@ export const inject = {
 }
 
 export function apply(ctx: Context, config: any) {
-  setDebugEnabled(config.debug || false)
-  debugLog('INFO', 'plugin start')
+  setVerboseLogging(config.debug || false)
+  logger.info('插件启动')
 
   const rt = createRuntime(ctx, config)
 
@@ -39,12 +39,12 @@ export function apply(ctx: Context, config: any) {
     if (session.selfId === session.userId) return
     const matches = extractAllUrlsFromMessage(session, rt.allRules)
     if (!matches.length) return
-    debugLog('INFO', `检测到 ${matches.length} 个链接`)
+    debugLog(`检测到 ${matches.length} 个链接`)
     if (config.showWaitingTip) {
       try {
         await sendWithTimeout(rt, session, h.quote(session.messageId) + getText(config, 'waitingTipText'))
       } catch(e) {
-        debugLog('WARN', '等待提示发送失败:', e)
+        logger.warn('等待提示发送失败:', e)
       }
     }
     await flush(rt, session, matches)
@@ -116,8 +116,8 @@ export function apply(ctx: Context, config: any) {
     rt.dedupCache.clear()
     videoVault.clear()
     clearModerationCache()
-    debugLog('INFO', '插件已卸载')
+    debugLog('插件已卸载')
   })
 
-  debugLog('INFO', '插件初始化完成')
+  logger.info('插件初始化完成')
 }

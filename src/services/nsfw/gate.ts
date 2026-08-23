@@ -13,7 +13,7 @@
  * - videoAction: redeem（暂存+私聊凭 token 取）| link（发原链接文字）| drop
  */
 import type { ParserRuntime } from '../../runtime'
-import { debugLog } from '../../utils/logger'
+import { debugLog, logger } from '../../utils/logger'
 import { createProvider, withFailClosed } from './moderation'
 import type { ModerationProvider } from './moderation'
 import { getFerret, scrambleImage } from './scramble'
@@ -100,10 +100,10 @@ async function moderateImage(rt: ParserRuntime, url: string): Promise<boolean> {
   try {
     const res = await rt.http.get(url, { responseType: 'arraybuffer', timeout: 30000 })
     const result = await provider.check({ url, buffer: Buffer.from(res.data) })
-    debugLog('INFO', `内容审核 ${result.nsfw ? '命中' : '通过'}（${result.label || 'clean'}）: ${url.slice(0, 60)}`)
+    debugLog(`内容审核 ${result.nsfw ? '命中' : '通过'}（${result.label || 'clean'}）: ${url.slice(0, 60)}`)
     return result.nsfw
   } catch (e: any) {
-    debugLog('WARN', `送审图片下载失败（fail-closed 按命中）: ${e?.message || e}`)
+    logger.warn(`送审图片下载失败（fail-closed 按命中）: ${e?.message || e}`)
     return true
   }
 }
@@ -164,7 +164,7 @@ export async function processVideo(rt: ParserRuntime, platform: string, videoUrl
     })
     const buffer = Buffer.from(res.data)
     if (buffer.length > maxBytes) {
-      debugLog('WARN', `受限视频 ${videoUrl} 体积 ${(buffer.length / 1048576).toFixed(1)}MB 超限 ${(maxBytes / 1048576).toFixed(0)}MB，降级发链接`)
+      logger.warn(`受限视频 ${videoUrl} 体积 ${(buffer.length / 1048576).toFixed(1)}MB 超限 ${(maxBytes / 1048576).toFixed(0)}MB，降级发链接`)
       return { kind: 'link', url: videoUrl }
     }
     const token = videoVault.put({
@@ -175,7 +175,7 @@ export async function processVideo(rt: ParserRuntime, platform: string, videoUrl
     })
     return { kind: 'card', token }
   } catch (e: any) {
-    debugLog('WARN', `受限视频暂存失败（降级发链接文字）: ${e?.message || e}`)
+      logger.warn(`受限视频暂存失败（降级发链接文字）: ${e?.message || e}`)
     return { kind: 'link', url: videoUrl }
   }
 }

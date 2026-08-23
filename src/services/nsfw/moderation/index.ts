@@ -5,7 +5,7 @@
  * 审核服务故障时按命中处理（宁可错杀，不放行）。结果经缓存去重。
  */
 import type { AxiosInstance } from 'axios'
-import { debugLog } from '../../../utils/logger'
+import { logger } from '../../../utils/logger'
 import { getCached, setCached } from './cache'
 import { createBaiduProvider } from './baidu'
 import { createYidunProvider } from './yidun'
@@ -52,7 +52,7 @@ export function withFailClosed(provider: ModerationProvider): ModerationProvider
       try {
         result = await provider.check(input)
       } catch (e: any) {
-        debugLog('WARN', `内容安全审核异常（fail-closed 按命中处理）: ${e?.message || e}`)
+        logger.warn(`内容安全审核异常（fail-closed 按命中处理）: ${e?.message || e}`)
         result = { nsfw: true, label: '审核服务异常' }
       }
       setCached(input, result)

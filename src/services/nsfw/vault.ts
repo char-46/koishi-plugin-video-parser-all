@@ -55,7 +55,7 @@ export class VideoVault {
       const oldest = this.items.values().next().value as Stored | undefined
       if (!oldest || oldest.token === token) break
       this.items.delete(oldest.token)
-      debugLog('INFO', 'vault LRU 驱逐一条暂存')
+      debugLog('vault LRU 驱逐一条暂存')
     }
     return token
   }

@@ -4,7 +4,7 @@ import { getNestedValue } from '../utils/field-mapping'
 import { pickBestQuality, parseCount } from '../utils/common'
 
 export function parseApiResponse(raw: any, maxDescLen: number, fieldMapping?: Record<string, string>): ParsedData {
-  debugLog('DEBUG', 'API raw response', raw)
+  debugLog('API raw response', raw)
   const data = raw?.data || {}
   const extra = data.extra || {}
 
