@@ -37,7 +37,11 @@ export async function sendForward(rt: ParserRuntime, session: any, items: Proces
         if (txt) { txt.attrs = { ...txt.attrs, content: `【${i + 1}/${total}】\n${txt.attrs?.content ?? ''}` }; break }
       }
     }
-    for (const u of units) bubbles.push(buildForwardNode(session, u.content, botName))
+    // mergeable 单元（概述+图片+提示）合并为第一个气泡；非 mergeable（视频文件/取件码/混淆图）各占一个气泡
+    const mergeable = units.filter(u => u.mergeable)
+    const standalone = units.filter(u => !u.mergeable)
+    if (mergeable.length) bubbles.push(buildForwardNode(session, mergeable.flatMap(u => u.content), botName))
+    for (const u of standalone) bubbles.push(buildForwardNode(session, u.content, botName))
   }
 
   // 仅一条消息：不打包转发卡片，直接发送

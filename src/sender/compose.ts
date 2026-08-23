@@ -2,9 +2,10 @@
  * 发送编排：把一条解析结果拆成「语义单元」（MessageUnit），按发送策略消费。
  *
  * 每个单元带 mergeable 标记：
- * - mergeable=true：文本/头像/封面/图片/音乐等普通内容，可合并进单条消息
- * - mergeable=false：视频文件 / 混淆图（解混淆+密钥+图）/ 视频取件码（取视频+提取码）
- *   这类内容不能并入单条消息，必须独立发送（与「含视频/图片超限自动分条」同类）。
+ * - mergeable=true：概述文字/头像/封面/图片/音乐/提示文案（含受限视频与混淆图提示），
+ *   全部并入首条消息——提示说清楚「怎么取」
+ * - mergeable=false：后面跟着的干脆的可领取形式，不含其他内容：
+ *   视频文件 / 「取视频 <token>」/ 「解混淆 <token>[混淆图]」
  *
  * 消费方式见 flush.ts：
  * - sendSingle：合并所有 mergeable 单元为一条，mergeable=false 单元逐条
@@ -98,15 +99,17 @@ export function buildUnits(rt: ParserRuntime, item: ProcessedItem): MessageUnit[
   // ⑧ 直播提示
   if (p.type === 'live' && config.sendLiveMessage) push([h.text('直播进行中，无法发送视频流。')], true)
 
-  // ⑨ 视频取件码（取视频 + 提取码，独立）
+  // ⑨ 受限视频：提示并入首条消息；取件码独立为干脆的「取视频 <token>」
   const videoHint = buildVideoHint(rt, item)
-  if (videoHint) push([h.text(videoHint)], false)
+  if (videoHint) push([h.text(videoHint)], true)
+  if (item.video.kind === 'card' && item.video.token) push([h.text(`取视频 ${item.video.token}`)], false)
 
-  // ⑩ 混淆图（解混淆 + 密钥 + 图，独立）
+  // ⑩ 混淆图：提示并入首条消息；独立消息为干脆的「解混淆 <token>[混淆图]」
   for (const img of [item.avatar, item.cover, ...item.images]) {
     if (img?.kind === 'scrambled' && img.buffer) {
+      if (img.token) push([h.text(buildImageHint(rt, img.token))], true)
       const c: h[] = []
-      if (img.token) c.push(h.text(buildImageHint(rt, img.token)))
+      if (img.token) c.push(h.text(`解混淆 ${img.token}`))
       c.push(h.image(img.buffer, 'image/png'))
       push(c, false)
     }

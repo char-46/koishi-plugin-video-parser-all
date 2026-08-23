@@ -25,10 +25,10 @@ function nsfwRt(config: any = {}, payloads: any = { code: 200, data: { images: [
 }
 
 describe('flush + NSFW 端到端', () => {
-  it('平台 full：概述 + 每张混淆图同消息带 token（无独立 hint 消息）', async () => {
+  it('平台 full：提示并入首条消息，混淆图消息为干脆的「解混淆 <token>[图]」', async () => {
     const rt = nsfwRt({
       nsfwPlatformMode: { xiaohongshu: 'full' },
-      nsfwPolicy: { imageAction: 'scramble', tokenHintText: '已混淆，token=<token>' },
+      nsfwPolicy: { imageAction: 'scramble', tokenHintText: '已混淆，token=${token}' },
     })
     rt.http = {
       get: async (url: string) => {
@@ -38,19 +38,24 @@ describe('flush + NSFW 端到端', () => {
     } as any
     const session = mockSession()
     await flush(rt, session as any, [{ type: 'xiaohongshu', url: 'https://xhslink.com/X', id: 'X' }])
-    // 混淆图出现在 sentElements 中（每张混淆图与 token 提示同一消息）
-    const allEls = sentElements(session._sent)
-    const imgEls = allEls.filter(c => c?.type === 'img')
-    expect(imgEls.length).toBe(2) // 两张混淆图
-    // token 提示出现在消息中
-    const allTexts = sentTexts(session._sent).join('\n')
-    expect(allTexts).toContain('token=')
+    // 首条消息：概述 + 全部混淆提示（token 在提示里）
+    const firstTexts = sentTexts([session._sent[0]]).join('\n')
+    expect(firstTexts).toContain('图集标题')
+    expect((firstTexts.match(/已混淆，token=/g) || []).length).toBe(2)
+    // 后续消息：每张混淆图独立一条，仅「解混淆 <token>」+ 图片，不含提示
+    const imgMsgs = session._sent.filter((m: any) => Array.isArray(m) && m.some((e: any) => e?.type === 'img'))
+    expect(imgMsgs.length).toBe(2)
+    for (const m of imgMsgs) {
+      const texts = m.filter((e: any) => e?.type === 'text').map((e: any) => e.attrs?.content ?? '')
+      expect(texts.every(t => /^解混淆 \S+/.test(t))).toBe(true)
+      expect(m.filter((e: any) => e?.type === 'img').length).toBe(1)
+    }
   })
 
-  it('受限视频：群内仅文字卡片 + token（无视频元素、无封面）', async () => {
+  it('受限视频：提示并入首条，取件消息为干脆的「取视频 <token>」', async () => {
     const rt = nsfwRt({
       nsfwPlatformMode: { douyin: 'full' },
-      nsfwPolicy: { videoAction: 'redeem', videoCardHint: '受限视频，私聊「取视频 <token>」领取（${ttl} 分钟内）' },
+      nsfwPolicy: { videoAction: 'redeem', videoCardHint: '受限视频，私聊「取视频 ${token}」领取（${ttl} 分钟内）' },
       nsfwVault: { ttlMinutes: 30, maxItems: 20, maxItemMB: 200, budgetMB: 600 },
     })
     rt.http = {
@@ -63,8 +68,15 @@ describe('flush + NSFW 端到端', () => {
     await flush(rt, session as any, [{ type: 'douyin', url: 'https://v.douyin.com/V/', id: 'V' }])
     const els = sentElements(session._sent)
     expect(els.some(c => c?.type === 'video')).toBe(false)      // 无视频元素
-    const texts = sentTexts(session._sent).join('\n')
-    expect(texts).toContain('取视频')                            // token 提示
+    // 首条消息：标题 + 受限提示
+    const firstTexts = sentTexts([session._sent[0]]).join('\n')
+    expect(firstTexts).toContain('T')
+    expect(firstTexts).toContain('受限视频')
+    // 后续消息：干脆的「取视频 <token>」，不含其他内容
+    const redeemMsg = session._sent.find((m: any) => Array.isArray(m)
+      && m.some((e: any) => e?.type === 'text' && /^取视频 \S+/.test(e.attrs?.content ?? '')))
+    expect(redeemMsg).toBeTruthy()
+    expect(redeemMsg.filter((e: any) => e?.type !== 'quote').length).toBe(1)
     // token 已入 vault 且绑定请求者
     const { videoVault } = await import('../src/services/nsfw/vault')
     expect(videoVault.size).toBeGreaterThanOrEqual(1)
