@@ -220,7 +220,7 @@ describe('nsfw/vault', () => {
 
 describe('compose — 提示文案', () => {
   it('videoCardHint 支持 ${until} 绝对时间与 ${ttl} 分钟', async () => {
-    const { buildTokenHint } = await import('../src/sender/compose')
+    const { buildVideoHint } = await import('../src/sender/compose')
     const rt = rtWith({
       nsfwPolicy: { videoCardHint: '原视频暂存至 ${until}（${ttl} 分钟），私聊「取视频 ${token}」领取' },
     })
@@ -228,9 +228,8 @@ describe('compose — 提示文案', () => {
       text: '', parsed: {} as any, images: [],
       avatar: { kind: 'raw' as const }, cover: null,
       video: { kind: 'card' as const, token: 'tok123' },
-      scrambleTokens: [],
     }
-    const hint = buildTokenHint(rt, item as any)
+    const hint = buildVideoHint(rt, item as any)
     expect(hint).toContain('暂存至 ')
     expect(hint).toMatch(/\d{2}:\d{2}/)          // 绝对时间 HH:mm
     expect(hint).toContain('30 分钟')            // ttl 占位
@@ -238,16 +237,10 @@ describe('compose — 提示文案', () => {
   })
 
   it('tokenHintText：默认引导私聊解码（群内直接发 token 无效）', async () => {
-    const { buildTokenHint } = await import('../src/sender/compose')
+    const { buildImageHint } = await import('../src/sender/compose')
     const rt = rtWith({
       nsfwPolicy: { tokenHintText: '图片已混淆，私聊发送「解混淆 ${token}」并附图还原' },
     })
-    const item = {
-      text: '', parsed: {} as any, images: [],
-      avatar: { kind: 'raw' as const }, cover: null,
-      video: { kind: 'raw' as const, url: '' },
-      scrambleTokens: ['abc'],
-    }
-    expect(buildTokenHint(rt, item as any)).toContain('解混淆 abc')
+    expect(buildImageHint(rt, 'abc')).toContain('解混淆 abc')
   })
 })

@@ -7,7 +7,7 @@ import type { ParserRuntime } from '../runtime'
 import { sendWithTimeout } from './sender'
 import { delay } from '../utils/common'
 import { debugLog } from '../utils/logger'
-import { buildTokenHint, type ProcessedItem } from './compose'
+import { buildImageHint, buildVideoHint, type ProcessedItem } from './compose'
 import type { ImageOutcome } from '../services/nsfw/gate'
 
 export function buildForwardNode(session: any, content: any, botName: string) {
@@ -18,9 +18,8 @@ export function buildForwardNode(session: any, content: any, botName: string) {
   return h('node', { user: { nickname: botName.substring(0, 15), user_id: session.selfId } }, messageContent)
 }
 
-function imageNode(img: ImageOutcome, placeholderIndex?: { n: number }): h | null {
+function imageNode(img: ImageOutcome): h | null {
   if (img.kind === 'drop') return null
-  if (img.kind === 'scrambled' && placeholderIndex) { placeholderIndex.n++; return h.text(`〔图片已混淆 ${placeholderIndex.n}〕`) }
   if (img.kind === 'raw' && img.url) return h.image(img.url)
   if (img.kind === 'link' && img.url) return h.text(`图片链接：${img.url}`)
   return null
@@ -35,8 +34,6 @@ export async function sendForward(rt: ParserRuntime, session: any, items: Proces
   for (let i = 0; i < total; i++) {
     const item = items[i]
     const p = item.parsed
-    const idx = { n: 0 }
-    const scrambledBufs: Buffer[] = []
 
     const withIndex = (s: string) => (total > 1 ? `【${i + 1}/${total}】\n${s}` : s)
     let text = withIndex(item.text)
@@ -48,9 +45,11 @@ export async function sendForward(rt: ParserRuntime, session: any, items: Proces
     const handleImg = (img: ImageOutcome) => {
       if (img.kind === 'drop') return
       if (img.kind === 'scrambled' && img.buffer) {
-        idx.n++
-        scrambledBufs.push(img.buffer)
-        nodes.push(buildForwardNode(session, `〔图片已混淆 ${idx.n}〕`, botName))
+        // 混淆图：一个 node = 解混淆提示 + 密钥 + 混淆图（转发即可私聊解码）
+        const parts: any[] = []
+        if (img.token) parts.push(h.text(buildImageHint(rt, img.token)))
+        parts.push(h.image(img.buffer, 'image/png'))
+        nodes.push(buildForwardNode(session, parts, botName))
         return
       }
       const n = imageNode(img)
@@ -69,14 +68,10 @@ export async function sendForward(rt: ParserRuntime, session: any, items: Proces
     }
     if (config.showMusicVoice && p.music.url) nodes.push(buildForwardNode(session, h.audio(p.music.url), botName))
 
-    // 混淆 hint 独立气泡（仅 decomposed 模式）
+    // 视频取件提示独立气泡（仅 decomposed 模式）
     if (item.sendMode === 'decomposed') {
-      const hint = buildTokenHint(rt, item)
+      const hint = buildVideoHint(rt, item)
       if (hint) nodes.push(buildForwardNode(session, hint, botName))
-      // 混淆图独立气泡（每张图在转发里是一个 node，群友可逐张保存转发）
-      for (const buf of scrambledBufs) {
-        nodes.push(buildForwardNode(session, h.image(buf, 'image/png'), botName))
-      }
     }
   }
 
@@ -89,7 +84,7 @@ export async function sendForward(rt: ParserRuntime, session: any, items: Proces
       debugLog('ERROR', '合并转发失败，降级逐条发送:', err)
       for (const item of items) {
         await sendWithTimeout(rt, session, item.text || '').catch(() => {})
-        const hint = buildTokenHint(rt, item)
+        const hint = buildVideoHint(rt, item)
         if (hint) await sendWithTimeout(rt, session, hint).catch(() => {})
         await delay(300)
       }

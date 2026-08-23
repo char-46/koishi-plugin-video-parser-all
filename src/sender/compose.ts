@@ -26,12 +26,10 @@ export interface ProcessedItem {
   avatar: ImageOutcome
   cover: ImageOutcome | null
   video: VideoOutcome
-  scrambleTokens: string[]
   /**
    * 发送模式（由 processItem 计算，发送层只读不决策）：
    * - integrated：无混淆内容，所有元素可合并为一条消息
    * - decomposed：有混淆图/视频取件码，每个语义单元必须独立发送
-   *   （用户需要逐条复制/转发 hint 文字、逐张保存混淆图到私聊解码）
    */
   sendMode: 'integrated' | 'decomposed'
 }
@@ -47,63 +45,27 @@ export function canSingle(rt: ParserRuntime, item: ProcessedItem): boolean {
   return true
 }
 
-/** 混淆 hint 文字（图片 token / 视频 token + 暂存截止时间） */
-export function buildTokenHint(rt: ParserRuntime, item: ProcessedItem): string {
+/** 单张混淆图的解混淆提示（附该图 token） */
+export function buildImageHint(rt: ParserRuntime, token: string): string {
   const nsfw = rt.config.nsfwPolicy || {}
-  const lines: string[] = []
-  const imgToken = item.scrambleTokens[0]
-  if (imgToken) lines.push(String(nsfw.tokenHintText || '').replace(/\$\{token\}/g, imgToken))
+  return String(nsfw.tokenHintText || '').replace(/\$\{token\}/g, token)
+}
+
+/** 受限视频取件提示（附 token + 暂存截止时间） */
+export function buildVideoHint(rt: ParserRuntime, item: ProcessedItem): string {
+  const nsfw = rt.config.nsfwPolicy || {}
   if (item.video.kind === 'card' && item.video.token) {
     const ttl = rt.config.nsfwVault?.ttlMinutes || 30
     const until = new Date(Date.now() + ttl * 60000)
     const untilStr = `${String(until.getHours()).padStart(2, '0')}:${String(until.getMinutes()).padStart(2, '0')}`
-    lines.push(String(nsfw.videoCardHint || '')
+    return String(nsfw.videoCardHint || '')
       .replace(/\$\{token\}/g, item.video.token)
       .replace(/\$\{until\}/g, untilStr)
-      .replace(/\$\{ttl\}/g, String(ttl)))
-  } else if (item.video.kind === 'link' && item.video.url) {
-    lines.push(`受限视频未在群内发送。视频链接：${item.video.url}`)
-  } else if (item.video.kind === 'drop' && item.parsed.video) {
-    lines.push('受限视频未在群内发送。')
+      .replace(/\$\{ttl\}/g, String(ttl))
   }
-  return lines.filter(Boolean).join('\n')
-}
-
-function pushRawImages(out: h[], imgs: ImageOutcome[]): void {
-  for (const img of imgs) {
-    if (img.kind === 'drop') continue
-    if (img.kind === 'raw' && img.url) out.push(h.image(img.url))
-    else if (img.kind === 'link' && img.url) out.push(h.text(`图片链接：${img.url}`))
-  }
-}
-
-/**
- * 构建一条完整文字消息（不含二进制图，混淆图用 〔图片已混淆〕 占位）。
- * 仅在单条模式下使用；分条模式直接发 item.text。
- */
-export function buildTextMessage(item: ProcessedItem, config: any): h | null {
-  let text = item.text
-  const p = item.parsed
-  if (config.showAuthorAvatar && p.avatar && item.avatar.kind !== 'drop' && config.showAuthorAvatarText) {
-    text = text ? text + '\n' + (config.authorAvatarText || '作者头像：') : (config.authorAvatarText || '作者头像：')
-  }
-  if (!text || !config.showImageText) return null
-  let n = 0
-  // 在文字里内嵌占位符（混淆图）或内联原图（非混淆）
-  const addCover = item.cover && p.cover && config.showCoverImage && p.type !== 'live_photo' && p.type !== 'image' && p.type !== 'live'
-  if (addCover) {
-    text += '\n' + (config.showCoverText ? (config.coverText || '封面：') : '')
-    if (item.cover!.kind === 'scrambled') { n++; text += `〔图片已混淆 ${n}〕` }
-    else if (item.cover!.kind === 'raw' && item.cover!.url) text += `\n${item.cover!.url}`
-    else if (item.cover!.kind === 'link' && item.cover!.url) text += `\n图片链接：${item.cover!.url}`
-  }
-  for (const img of item.images) {
-    if (img.kind === 'drop') continue
-    if (img.kind === 'scrambled') { n++; text += `\n〔图片已混淆 ${n}〕` }
-    else if (img.kind === 'raw' && img.url) text += `\n${img.url}`
-    else if (img.kind === 'link' && img.url) text += `\n图片链接：${img.url}`
-  }
-  return h.text(text)
+  if (item.video.kind === 'link' && item.video.url) return `受限视频未在群内发送。视频链接：${item.video.url}`
+  if (item.video.kind === 'drop' && item.parsed.video) return '受限视频未在群内发送。'
+  return ''
 }
 
 /**
@@ -122,10 +84,8 @@ export async function sendDecomposed(
   const { config } = rt
   const p = item.parsed
 
-  // ① 文字消息
-  const textMsg = item.sendMode === 'decomposed'
-    ? buildTextMessage(item, config)   // decomposed：含占位符 〔图片已混淆 N〕
-    : (item.text && config.showImageText ? h.text(item.text) : null) // integrated：纯文字
+  // ① 概述文字消息（概述；混淆图/取件码在后续消息各带提示，此处不再放占位符）
+  const textMsg = item.text && config.showImageText ? h.text(item.text) : null
   if (textMsg) {
     const toSend = opts.quoteId ? [h.quote(opts.quoteId), textMsg] : [textMsg]
     await sendWithTimeout(rt, session, toSend)
@@ -183,22 +143,26 @@ export async function sendDecomposed(
     await sendWithTimeout(rt, session, '直播进行中，无法发送视频流。')
   }
 
-  // ③ 混淆 hint（纯文字，独立一条，可复制/转发）
+  // ③ 视频取件提示（纯文字，附 token + 暂存截止时间）
   if (item.sendMode === 'decomposed') {
-    const hint = buildTokenHint(rt, item)
-    if (hint) {
-      const hintH = [h.text(hint)]
+    const videoHint = buildVideoHint(rt, item)
+    if (videoHint) {
+      const hintH = [h.text(videoHint)]
       if (opts.quoteId) hintH.unshift(h.quote(opts.quoteId))
       await sendWithTimeout(rt, session, hintH)
       await delay(500)
     }
+  }
 
-    // ④ 混淆图（每张独立消息，可逐张保存转发到私聊解码）
-    const scrambledImages = [item.avatar, item.cover, ...item.images]
-      .filter((img): img is ImageOutcome => img?.kind === 'scrambled' && !!img.buffer)
-    for (const img of scrambledImages) {
-      await sendWithTimeout(rt, session, h.image(img.buffer!, 'image/png')).catch(() => {})
-      await delay(300)
-    }
+  // ④ 混淆图：每张独立消息 = 解混淆提示 + 密钥 + 混淆图（同一消息，转发即可在私聊解码）
+  const scrambledImages = [item.avatar, item.cover, ...item.images]
+    .filter((img): img is ImageOutcome => img?.kind === 'scrambled' && !!img.buffer)
+  for (const img of scrambledImages) {
+    const parts: any[] = []
+    if (img.token) parts.push(h.text(buildImageHint(rt, img.token)))
+    parts.push(h.image(img.buffer!, 'image/png'))
+    if (opts.quoteId) parts.unshift(h.quote(opts.quoteId))
+    await sendWithTimeout(rt, session, parts).catch(() => {})
+    await delay(300)
   }
 }

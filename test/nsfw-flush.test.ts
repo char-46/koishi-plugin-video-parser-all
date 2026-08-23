@@ -25,7 +25,7 @@ function nsfwRt(config: any = {}, payloads: any = { code: 200, data: { images: [
 }
 
 describe('flush + NSFW 端到端', () => {
-  it('平台 full：主消息用占位符，混淆图 + token 独立第二条发送', async () => {
+  it('平台 full：概述 + 每张混淆图同消息带 token（无独立 hint 消息）', async () => {
     const rt = nsfwRt({
       nsfwPlatformMode: { xiaohongshu: 'full' },
       nsfwPolicy: { imageAction: 'scramble', tokenHintText: '已混淆，token=<token>' },
@@ -38,14 +38,13 @@ describe('flush + NSFW 端到端', () => {
     } as any
     const session = mockSession()
     await flush(rt, session as any, [{ type: 'xiaohongshu', url: 'https://xhslink.com/X', id: 'X' }])
-    // 混淆图出现在 sentElements 中（占位符在主消息，混淆图 buffer 在附加消息）
+    // 混淆图出现在 sentElements 中（每张混淆图与 token 提示同一消息）
     const allEls = sentElements(session._sent)
     const imgEls = allEls.filter(c => c?.type === 'img')
     expect(imgEls.length).toBe(2) // 两张混淆图
-    // token 出现在消息中
+    // token 提示出现在消息中
     const allTexts = sentTexts(session._sent).join('\n')
     expect(allTexts).toContain('token=')
-    expect(allTexts).toContain('〔图片已混淆') // 主消息占位符
   })
 
   it('受限视频：群内仅文字卡片 + token（无视频元素、无封面）', async () => {

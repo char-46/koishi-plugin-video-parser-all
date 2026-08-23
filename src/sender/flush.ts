@@ -21,7 +21,7 @@ import { processSingleUrl } from '../engine/fetcher'
 import { processImage, processVideo } from '../services/nsfw/gate'
 import type { ImageOutcome, VideoOutcome } from '../services/nsfw/gate'
 import { sendWithTimeout } from './sender'
-import { sendDecomposed, buildTokenHint, canSingle, type ProcessedItem } from './compose'
+import { sendDecomposed, canSingle, type ProcessedItem } from './compose'
 import { sendForward } from './forward'
 
 export interface FlushOptions {
@@ -39,31 +39,25 @@ function dedupScopeKey(session: any, url: string): string {
 async function processItem(rt: ParserRuntime, session: any, platform: string, text: string, parsed: any): Promise<ProcessedItem> {
   const requesterId = String(session?.userId || 'unknown')
   const images: ImageOutcome[] = []
-  const scrambleTokens: string[] = []
   for (const url of (parsed.images || []) as string[]) {
-    const out = await processImage(rt, platform, url, 'image')
-    if (out.kind === 'scrambled' && out.token) scrambleTokens.push(out.token)
-    images.push(out)
+    images.push(await processImage(rt, platform, url, 'image'))
   }
   const avatar = parsed.avatar ? await processImage(rt, platform, parsed.avatar, 'avatar') : { kind: 'drop' as const }
-  if (avatar.kind === 'scrambled' && avatar.token) scrambleTokens.push(avatar.token)
   const cover = (parsed.cover && parsed.type !== 'image' && parsed.type !== 'live_photo' && parsed.type !== 'live')
     ? await processImage(rt, platform, parsed.cover, 'cover')
     : null
-  if (cover && cover.kind === 'scrambled' && cover.token) scrambleTokens.push(cover.token)
 
   const video: VideoOutcome = parsed.video
     ? await processVideo(rt, platform, parsed.video, parsed.cover || '', { title: parsed.title, author: parsed.author, requesterId })
     : { kind: 'raw' as const, url: '' }
 
   // 计算发送模式：有混淆图或视频取件码 → decomposed（每个语义单元独立消息）
-  const hasScrambled = scrambleTokens.length > 0
-    || avatar.kind === 'scrambled'
+  const hasScrambled = avatar.kind === 'scrambled'
     || cover?.kind === 'scrambled'
     || images.some(i => i.kind === 'scrambled')
   const sendMode = (hasScrambled || video.kind === 'card') ? 'decomposed' as const : 'integrated' as const
 
-  return { text, parsed, images, avatar, cover, video, scrambleTokens, sendMode }
+  return { text, parsed, images, avatar, cover, video, sendMode }
 }
 
 export async function flush(rt: ParserRuntime, session: any, matches: LinkMatch[], opts: FlushOptions = {}) {
