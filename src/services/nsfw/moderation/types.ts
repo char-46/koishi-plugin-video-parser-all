@@ -26,7 +26,16 @@ export interface BaiduConf { apiKey: string; secretKey: string }
 export interface YidunConf { secretId: string; secretKey: string }
 export interface AliyunConf { accessKeyId: string; accessKeySecret: string; region?: string }
 export interface TencentConf { secretId: string; secretKey: string; region?: string }
-export interface AzureConf { endpoint: string; apiKey: string }
+export interface AzureConf {
+  endpoint: string
+  apiKey: string
+  /** 送审类别（默认 Sexual+Violence；可选 Hate/SelfHarm） */
+  categories?: string[]
+  /** 命中阈值 0-6（默认 2） */
+  severityThreshold?: number
+  /** 自定义阻止列表名称 */
+  blocklistNames?: string[]
+}
 export interface CustomConf {
   endpoint: string
   method?: 'GET' | 'POST'

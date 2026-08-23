@@ -47,8 +47,8 @@ export const NsfwConfig = Schema.object({
       Schema.const('drop' as const).description('不发送'),
     ]).default('redeem').description('视频命中后的动作（封面送审判定）'),
     scrambleAvatar: Schema.boolean().default(false).description('作者头像也参与混淆（默认跳过）'),
-    tokenHintText: Schema.string().role('textarea').default('检测到可能不适宜的内容，图片已混淆。如需查看：将该图片转发到与机器人的私聊，随消息发送「解混淆 ${token}」即可还原（群里直接发 token 无效）。').description('图片混淆提示文案（占位 ${token}）'),
-    videoCardHint: Schema.string().role('textarea').default('检测到受限视频，未在群内发送。原视频暂存至 ${until}，私聊发送「取视频 ${token}」领取。').description('受限视频卡片提示文案（占位 ${token} ${until} ${ttl}）'),
+    tokenHintText: Schema.string().role('textarea').default('检测到可能不适宜的内容，已混淆 ${count} 张图片。如需查看：将图片转发到与机器人的私聊，随消息发送「解混淆 + 取件码」即可还原（取件码见各混淆图消息，群里直接发取件码无效）。').description('首条消息的图片混淆提示文案（占位 ${count}，不含取件码）'),
+    videoCardHint: Schema.string().role('textarea').default('检测到受限视频，未在群内发送。原视频暂存至 ${until}，私聊发送「取视频 + 取件码」领取（取件码见下条消息）。').description('首条消息的受限视频提示文案（占位 ${until} ${ttl}，不含取件码）'),
   }).description('处理策略'),
 
   nsfwGlobalMode: modeUnion.default('off').description('全平台一刀切模式：off=全部关闭（默认）；full/smart 对所有未显式配置的平台生效（平台级可单独覆盖）'),
@@ -97,6 +97,14 @@ export const NsfwConfig = Schema.object({
     azure: Schema.object({
       endpoint: Schema.string().default('').description('资源地址，如 https://<resource>.cognitiveservices.azure.com'),
       apiKey: Schema.string().role('secret').default('').description('Ocp-Apim-Subscription-Key 密钥'),
+      categories: Schema.array(Schema.union([
+        Schema.const('Sexual' as const).description('性内容'),
+        Schema.const('Violence' as const).description('暴力'),
+        Schema.const('Hate' as const).description('仇恨'),
+        Schema.const('SelfHarm' as const).description('自残'),
+      ])).default(['Sexual', 'Violence']).description('送审类别（图像分析支持以上四类）'),
+      severityThreshold: Schema.number().min(0).max(6).step(1).default(2).description('命中阈值：任一类别 severity ≥ 此值判命中（0=全命中 6=几乎不命中）'),
+      blocklistNames: Schema.array(Schema.string()).default([]).description('自定义阻止列表名称（需先在 Azure 门户或管理 API 创建）'),
     }).description('Azure Content Safety 凭证'),
     custom: Schema.object({
       endpoint: Schema.string().default('').description('审核接口地址'),

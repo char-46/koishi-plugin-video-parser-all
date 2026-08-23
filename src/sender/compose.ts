@@ -35,13 +35,13 @@ export interface MessageUnit {
   mergeable: boolean
 }
 
-/** 单张混淆图的解混淆提示（附该图 token） */
-export function buildImageHint(rt: ParserRuntime, token: string): string {
+/** 首条消息的混淆图数量提示（不含取件码，取件码只出现在独立领取消息里） */
+export function buildImageHint(rt: ParserRuntime, count: number): string {
   const nsfw = rt.config.nsfwPolicy || {}
-  return String(nsfw.tokenHintText || '').replace(/\$\{token\}/g, token)
+  return String(nsfw.tokenHintText || '').replace(/\$\{count\}/g, String(count))
 }
 
-/** 受限视频取件提示（附 token + 暂存截止时间） */
+/** 首条消息的受限视频提示（不含取件码；token 只在独立的「取视频 <token>」消息里） */
 export function buildVideoHint(rt: ParserRuntime, item: ProcessedItem): string {
   const nsfw = rt.config.nsfwPolicy || {}
   if (item.video.kind === 'card' && item.video.token) {
@@ -49,7 +49,6 @@ export function buildVideoHint(rt: ParserRuntime, item: ProcessedItem): string {
     const until = new Date(Date.now() + ttl * 60000)
     const untilStr = `${String(until.getHours()).padStart(2, '0')}:${String(until.getMinutes()).padStart(2, '0')}`
     return String(nsfw.videoCardHint || '')
-      .replace(/\$\{token\}/g, item.video.token)
       .replace(/\$\{until\}/g, untilStr)
       .replace(/\$\{ttl\}/g, String(ttl))
   }
@@ -104,15 +103,18 @@ export function buildUnits(rt: ParserRuntime, item: ProcessedItem): MessageUnit[
   if (videoHint) push([h.text(videoHint)], true)
   if (item.video.kind === 'card' && item.video.token) push([h.text(`取视频 ${item.video.token}`)], false)
 
-  // ⑩ 混淆图：提示并入首条消息；独立消息为干脆的「解混淆 <token>[混淆图]」
-  for (const img of [item.avatar, item.cover, ...item.images]) {
-    if (img?.kind === 'scrambled' && img.buffer) {
-      if (img.token) push([h.text(buildImageHint(rt, img.token))], true)
-      const c: h[] = []
-      if (img.token) c.push(h.text(`解混淆 ${img.token}`))
-      c.push(h.image(img.buffer, 'image/png'))
-      push(c, false)
-    }
+  // ⑩ 混淆图：首条只报数量；每张独立为干脆的「解混淆 <token>[混淆图]」
+  const scrambledImgs = [item.avatar, item.cover, ...item.images]
+    .filter(img => img?.kind === 'scrambled' && img.buffer) as { kind: 'scrambled'; buffer: Buffer; token?: string }[]
+  if (scrambledImgs.length) {
+    const summary = buildImageHint(rt, scrambledImgs.length)
+    if (summary) push([h.text(summary)], true)
+  }
+  for (const img of scrambledImgs) {
+    const c: h[] = []
+    if (img.token) c.push(h.text(`解混淆 ${img.token}`))
+    c.push(h.image(img.buffer, 'image/png'))
+    push(c, false)
   }
 
   return units

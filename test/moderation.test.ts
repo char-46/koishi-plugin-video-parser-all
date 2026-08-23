@@ -76,7 +76,7 @@ describe('moderation — 各平台签名与判定', () => {
     expect(calls[0].headers['X-TC-Action']).toBe('ImageModeration')
   })
 
-  it('Azure：subscription key 头 + severity>=2 判命中', async () => {
+  it('Azure：subscription key 头 + severity>=2 判命中；类别/阈值/阻止列表可配置', async () => {
     const { http, calls } = mockHttp(() => ({ data: { categoriesAnalysis: [{ category: 'Sexual', severity: 4 }, { category: 'Violence', severity: 0 }] } }))
     const p = createProvider({ provider: 'azure', azure: { endpoint: 'https://res.cognitiveservices.azure.com/', apiKey: 'k1' } }, http)!
     const r = await p.check(input)
@@ -84,10 +84,17 @@ describe('moderation — 各平台签名与判定', () => {
     expect(r.label).toBe('Sexual')
     expect(calls[0].url).toContain('/contentsafety/image:analyze?api-version=2023-10-01')
     expect(calls[0].headers['Ocp-Apim-Subscription-Key']).toBe('k1')
+    expect(calls[0].body.categories).toEqual(['Sexual', 'Violence']) // 默认类别
     // 全部低于阈值 → 合规
     const { http: http2 } = mockHttp(() => ({ data: { categoriesAnalysis: [{ category: 'Sexual', severity: 0 }] } }))
     const p2 = createProvider({ provider: 'azure', azure: { endpoint: 'https://res.cognitiveservices.azure.com', apiKey: 'k1' } }, http2)!
     expect((await p2.check(input)).nsfw).toBe(false)
+    // 自定义类别 + 自定义阈值（Hate severity 3，阈值 4 → 不命中）
+    const { http: http3, calls: calls3 } = mockHttp(() => ({ data: { categoriesAnalysis: [{ category: 'Hate', severity: 3 }] } }))
+    const p3 = createProvider({ provider: 'azure', azure: { endpoint: 'https://res.cognitiveservices.azure.com', apiKey: 'k1', categories: ['Hate', 'SelfHarm'], severityThreshold: 4, blocklistNames: ['mylist'] } }, http3)!
+    expect((await p3.check(input)).nsfw).toBe(false)
+    expect(calls3[0].body.categories).toEqual(['Hate', 'SelfHarm'])
+    expect(calls3[0].body.blocklistNames).toEqual(['mylist'])
   })
 
   it('自定义模板：bodyTemplate 占位替换 + verdictJsonPath 判定', async () => {

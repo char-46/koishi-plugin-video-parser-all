@@ -25,10 +25,10 @@ function nsfwRt(config: any = {}, payloads: any = { code: 200, data: { images: [
 }
 
 describe('flush + NSFW 端到端', () => {
-  it('平台 full：提示并入首条消息，混淆图消息为干脆的「解混淆 <token>[图]」', async () => {
+  it('平台 full：首条仅报混淆数量（不含取件码），混淆图消息为干脆的「解混淆 <token>[图]」', async () => {
     const rt = nsfwRt({
       nsfwPlatformMode: { xiaohongshu: 'full' },
-      nsfwPolicy: { imageAction: 'scramble', tokenHintText: '已混淆，token=${token}' },
+      nsfwPolicy: { imageAction: 'scramble', tokenHintText: '已混淆 ${count} 张图片' },
     })
     rt.http = {
       get: async (url: string) => {
@@ -38,11 +38,12 @@ describe('flush + NSFW 端到端', () => {
     } as any
     const session = mockSession()
     await flush(rt, session as any, [{ type: 'xiaohongshu', url: 'https://xhslink.com/X', id: 'X' }])
-    // 首条消息：概述 + 全部混淆提示（token 在提示里）
+    // 首条消息：概述 + 数量提示（无任何取件码）
     const firstTexts = sentTexts([session._sent[0]]).join('\n')
     expect(firstTexts).toContain('图集标题')
-    expect((firstTexts.match(/已混淆，token=/g) || []).length).toBe(2)
-    // 后续消息：每张混淆图独立一条，仅「解混淆 <token>」+ 图片，不含提示
+    expect(firstTexts).toContain('已混淆 2 张图片')
+    expect(firstTexts).not.toContain('解混淆 ')
+    // 后续消息：每张混淆图独立一条，仅「解混淆 <token>」+ 图片
     const imgMsgs = session._sent.filter((m: any) => Array.isArray(m) && m.some((e: any) => e?.type === 'img'))
     expect(imgMsgs.length).toBe(2)
     for (const m of imgMsgs) {
@@ -52,10 +53,10 @@ describe('flush + NSFW 端到端', () => {
     }
   })
 
-  it('受限视频：提示并入首条，取件消息为干脆的「取视频 <token>」', async () => {
+  it('受限视频：首条提示不含取件码，取件消息为干脆的「取视频 <token>」', async () => {
     const rt = nsfwRt({
       nsfwPlatformMode: { douyin: 'full' },
-      nsfwPolicy: { videoAction: 'redeem', videoCardHint: '受限视频，私聊「取视频 ${token}」领取（${ttl} 分钟内）' },
+      nsfwPolicy: { videoAction: 'redeem', videoCardHint: '受限视频已暂存至 ${until}（${ttl} 分钟内）' },
       nsfwVault: { ttlMinutes: 30, maxItems: 20, maxItemMB: 200, budgetMB: 600 },
     })
     rt.http = {
@@ -68,10 +69,11 @@ describe('flush + NSFW 端到端', () => {
     await flush(rt, session as any, [{ type: 'douyin', url: 'https://v.douyin.com/V/', id: 'V' }])
     const els = sentElements(session._sent)
     expect(els.some(c => c?.type === 'video')).toBe(false)      // 无视频元素
-    // 首条消息：标题 + 受限提示
+    // 首条消息：标题 + 受限提示（无取件码）
     const firstTexts = sentTexts([session._sent[0]]).join('\n')
     expect(firstTexts).toContain('T')
-    expect(firstTexts).toContain('受限视频')
+    expect(firstTexts).toContain('受限视频已暂存至')
+    expect(firstTexts).not.toContain('取视频 ')
     // 后续消息：干脆的「取视频 <token>」，不含其他内容
     const redeemMsg = session._sent.find((m: any) => Array.isArray(m)
       && m.some((e: any) => e?.type === 'text' && /^取视频 \S+/.test(e.attrs?.content ?? '')))
