@@ -7,7 +7,7 @@ import type { ParserRuntime } from '../runtime'
 import { sendWithTimeout } from './sender'
 import { delay } from '../utils/common'
 import { debugLog } from '../utils/logger'
-import { buildTokenHint, hasScrambled, type ProcessedItem } from './compose'
+import { buildTokenHint, type ProcessedItem } from './compose'
 import type { ImageOutcome } from '../services/nsfw/gate'
 
 export function buildForwardNode(session: any, content: any, botName: string) {
@@ -69,11 +69,11 @@ export async function sendForward(rt: ParserRuntime, session: any, items: Proces
     }
     if (config.showMusicVoice && p.music.url) nodes.push(buildForwardNode(session, h.audio(p.music.url), botName))
 
-    // 混淆 hint 独立气泡
-    const hint = buildTokenHint(rt, item)
-    if (hint) nodes.push(buildForwardNode(session, hint, botName))
-    // 混淆图独立气泡（每张图在转发里是一个 node，群友可逐张保存转发）
-    if (scrambledBufs.length) {
+    // 混淆 hint 独立气泡（仅 decomposed 模式）
+    if (item.sendMode === 'decomposed') {
+      const hint = buildTokenHint(rt, item)
+      if (hint) nodes.push(buildForwardNode(session, hint, botName))
+      // 混淆图独立气泡（每张图在转发里是一个 node，群友可逐张保存转发）
       for (const buf of scrambledBufs) {
         nodes.push(buildForwardNode(session, h.image(buf, 'image/png'), botName))
       }

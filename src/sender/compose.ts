@@ -27,21 +27,18 @@ export interface ProcessedItem {
   cover: ImageOutcome | null
   video: VideoOutcome
   scrambleTokens: string[]
-}
-
-/** 有任意混淆内容 */
-export function hasScrambled(item: ProcessedItem): boolean {
-  return item.scrambleTokens.length > 0
-    || item.avatar.kind === 'scrambled'
-    || item.cover?.kind === 'scrambled'
-    || item.images.some(i => i.kind === 'scrambled')
-    || item.video.kind === 'card'
+  /**
+   * 发送模式（由 processItem 计算，发送层只读不决策）：
+   * - integrated：无混淆内容，所有元素可合并为一条消息
+   * - decomposed：有混淆图/视频取件码，每个语义单元必须独立发送
+   *   （用户需要逐条复制/转发 hint 文字、逐张保存混淆图到私聊解码）
+   */
+  sendMode: 'integrated' | 'decomposed'
 }
 
 /** 单条发送是否可行（无视频元素、图片不超限、无混淆） */
 export function canSingle(rt: ParserRuntime, item: ProcessedItem): boolean {
-  if (hasScrambled(item)) return false
-  if (item.video.kind !== 'raw') return false
+  if (item.sendMode === 'decomposed') return false
   const n = item.images.filter(i => i.kind !== 'drop').length
     + (item.cover && item.cover.kind !== 'drop' ? 1 : 0)
     + (item.avatar.kind !== 'drop' ? 1 : 0)
@@ -110,23 +107,25 @@ export function buildTextMessage(item: ProcessedItem, config: any): h | null {
 }
 
 /**
- * 把一条解析结果拆成独立消息并逐条发送（single + split 共用）。
+ * 把一条解析结果拆成独立消息并逐条发送。
  * 每次 sendWithTimeout 只发一个语义单元，适配器不可合并。
+ * sendMode 由 processItem 计算，发送层只读不决策：
+ * - integrated：无混淆，文字消息不内联占位符
+ * - decomposed：有混淆图/视频取件码，文字消息含占位符，hint 和混淆图各自独立消息
  */
 export async function sendDecomposed(
   rt: ParserRuntime,
   session: any,
   item: ProcessedItem,
-  opts: { quoteId?: string; compact?: boolean } = {},
+  opts: { quoteId?: string } = {},
 ): Promise<void> {
   const { config } = rt
   const p = item.parsed
-  const isScrambled = hasScrambled(item)
 
-  // ① 文字消息（含占位符，原始图片以 URL 形式内联）
-  const textMsg = opts.compact
-    ? (item.text && config.showImageText ? h.text(item.text) : null)
-    : buildTextMessage(item, config)
+  // ① 文字消息
+  const textMsg = item.sendMode === 'decomposed'
+    ? buildTextMessage(item, config)   // decomposed：含占位符 〔图片已混淆 N〕
+    : (item.text && config.showImageText ? h.text(item.text) : null) // integrated：纯文字
   if (textMsg) {
     const toSend = opts.quoteId ? [h.quote(opts.quoteId), textMsg] : [textMsg]
     await sendWithTimeout(rt, session, toSend)
@@ -185,7 +184,7 @@ export async function sendDecomposed(
   }
 
   // ③ 混淆 hint（纯文字，独立一条，可复制/转发）
-  if (isScrambled) {
+  if (item.sendMode === 'decomposed') {
     const hint = buildTokenHint(rt, item)
     if (hint) {
       const hintH = [h.text(hint)]
@@ -193,18 +192,13 @@ export async function sendDecomposed(
       await sendWithTimeout(rt, session, hintH)
       await delay(500)
     }
-  }
 
-  // ④ 混淆图（每张独立消息，可逐张保存转发到私聊解码）
-  const scrambledImages = [item.avatar, item.cover, ...item.images]
-    .filter((img): img is ImageOutcome => img?.kind === 'scrambled' && !!img.buffer)
-  for (const img of scrambledImages) {
-    await sendWithTimeout(rt, session, h.image(img.buffer!, 'image/png')).catch(() => {})
-    await delay(300)
+    // ④ 混淆图（每张独立消息，可逐张保存转发到私聊解码）
+    const scrambledImages = [item.avatar, item.cover, ...item.images]
+      .filter((img): img is ImageOutcome => img?.kind === 'scrambled' && !!img.buffer)
+    for (const img of scrambledImages) {
+      await sendWithTimeout(rt, session, h.image(img.buffer!, 'image/png')).catch(() => {})
+      await delay(300)
+    }
   }
-}
-
-/** 逐条模式（旧版行为，compact=false 已含全部语义单元拆分） */
-export async function sendSplit(rt: ParserRuntime, session: any, item: ProcessedItem, quoteId?: string): Promise<void> {
-  await sendDecomposed(rt, session, item, { quoteId, compact: false })
 }
