@@ -10,7 +10,8 @@ import { flush } from './sender/flush'
 import { diagnoseTls } from './utils/tls-client'
 import { nsfwCapability } from './services/nsfw/gate'
 import { videoVault, configureVault } from './services/nsfw/vault'
-import { clearModerationCache } from './services/nsfw/moderation/cache'
+import { initModerationCache, flushModerationCache } from './services/nsfw/moderation/cache'
+import { createHash } from 'crypto'
 
 export { name, Config }
 
@@ -25,8 +26,10 @@ export function apply(ctx: Context, config: any) {
 
   const rt = createRuntime(ctx, config)
 
-  // 内容安全子系统：按配置初始化 vault
+  // 内容安全子系统：按配置初始化 vault 与审核缓存（配置签名变更自动作废旧持久化结果）
   if (config.nsfwVault) configureVault(config.nsfwVault)
+  const modSig = createHash('sha256').update(JSON.stringify(config.nsfwModeration || {})).digest('hex').slice(0, 16)
+  initModerationCache((ctx as any).baseDir, modSig)
   const cap = nsfwCapability(rt)
   ctx.logger.info(`内容安全能力：混淆${cap.ferret ? '可用（ferret-transform 服务已加载）' : '不可用（未检测到 koishi-plugin-ferret-transform-image，相关功能停用）'}；审核${cap.moderation ? `已启用（${cap.moderation}）` : '未配置'}`)
   // 易踩坑提示：配了审核 Provider 但模式全 off，审核不会执行
@@ -124,7 +127,7 @@ export function apply(ctx: Context, config: any) {
     rt.urlCacheLocal.clear()
     rt.dedupCache.clear()
     videoVault.clear()
-    clearModerationCache()
+    flushModerationCache() // 审核缓存持久化保留（防抖未落盘的立即写出）
     debugLog('插件已卸载')
   })
 

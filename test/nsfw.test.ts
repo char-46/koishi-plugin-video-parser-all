@@ -146,6 +146,9 @@ describe('nsfw/gate — processImage', () => {
     verdict = false
     const pass = await processImage(mk(), 'douyin', 'https://x/clean.jpg', 'image')
     expect(pass.kind).toBe('raw')
+    // 缓存为内容寻址（同字节同判定），两阶段用同图需清缓存
+    const { clearModerationCache } = await import('../src/services/nsfw/moderation/cache')
+    clearModerationCache()
     verdict = true
     const hit = await processImage(mk(), 'douyin', 'https://x/dirty.jpg', 'image')
     expect(hit.kind).toBe('scrambled')

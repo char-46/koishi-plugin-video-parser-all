@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { createHash, createHmac } from 'crypto'
+import { existsSync, rmSync } from 'fs'
+import { join, resolve } from 'path'
 import { createProvider, withFailClosed, yidunSignature, aliyunSignature, percentEncode, tencentTc3Sign, getPath } from '../src/services/nsfw/moderation'
 import type { AxiosInstance } from 'axios'
 
@@ -131,5 +133,41 @@ describe('moderation — 各平台签名与判定', () => {
   it('凭证缺失 → createProvider 返回 null（审核未启用）', () => {
     const { http } = mockHttp(() => ({}))
     expect(createProvider({ provider: 'baidu', baidu: { apiKey: '', secretKey: '' } }, http)).toBeNull()
+  })
+})
+
+describe('moderation cache — 内容寻址 + 持久化', () => {
+  const PNG2x2 = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAACZgbYnAAAAF0lEQVR42mNk+M+ACzDhVQ4CAAvwATkP0c0AAAAASUVORK5CYII=', 'base64')
+  const tmp = resolve(process.cwd(), 'node_modules', '.moderation-cache-test')
+  const file = join(tmp, 'data', 'video-parser-all', 'moderation-cache.json')
+
+  it('键与 URL 无关：查询参数/短链/域名不同但字节相同 → 命中', async () => {
+    const { getCached, setCached, initModerationCache, clearModerationCache } = await import('../src/services/nsfw/moderation/cache')
+    initModerationCache(undefined, 'sig-test') // 纯内存
+    const buf = PNG2x2
+    setCached({ url: 'https://a.com/x.jpg?format=small', buffer: buf }, { nsfw: true, label: 'Sexual' })
+    // 同字节不同 URL 形态（查询参数 / 短链域名 / 镜像 CDN）全部命中
+    expect(getCached({ url: 'https://a.com/x.jpg?format=large&name=orig', buffer: buf })?.nsfw).toBe(true)
+    expect(getCached({ url: 'https://t.cn/AbCdE', buffer: buf })?.nsfw).toBe(true)
+    expect(getCached({ url: 'https://mirror-cdn.net/img/999.webp', buffer: buf })?.nsfw).toBe(true)
+    // 字节不同 → 不命中
+    expect(getCached({ url: 'https://a.com/x.jpg', buffer: PNG1x1 })).toBeUndefined()
+    clearModerationCache()
+  })
+
+  it('持久化：落盘后重 init 可读回；配置签名变更作废', async () => {
+    const { getCached, setCached, initModerationCache, flushModerationCache } = await import('../src/services/nsfw/moderation/cache')
+    rmSync(tmp, { recursive: true, force: true })
+    initModerationCache(tmp, 'sigA')
+    setCached({ url: 'https://x/1.jpg', buffer: PNG1x1 }, { nsfw: false, label: '' })
+    flushModerationCache()
+    expect(existsSync(file)).toBe(true)
+    // 模拟重启：重新 init 同签名 → 读回
+    initModerationCache(tmp, 'sigA')
+    expect(getCached({ url: 'https://whatever', buffer: PNG1x1 })?.nsfw).toBe(false)
+    // 签名变更（provider 配置变化）→ 旧条目作废
+    initModerationCache(tmp, 'sigB')
+    expect(getCached({ url: 'https://whatever', buffer: PNG1x1 })).toBeUndefined()
+    rmSync(tmp, { recursive: true, force: true })
   })
 })
