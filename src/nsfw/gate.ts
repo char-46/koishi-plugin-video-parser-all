@@ -150,9 +150,23 @@ export async function processVideo(rt: ParserRuntime, platform: string, videoUrl
   if (policy.videoAction === 'link') return { kind: 'link', url: videoUrl }
 
   // redeem：尝试下载缓存（<=maxItemMB），超限/失败降级 link
+  // X 媒体 CDN (video.twimg.com/pbs.twimg.com) 需要浏览器级 UA + Referer 才不会 403
+  const maxBytes = (videoVault as any).conf.maxItemMB * 1048576
+  const CHROME_UA_V = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
   try {
-    const res = await rt.http.get(videoUrl, { responseType: 'arraybuffer', timeout: 120000, maxContentLength: (videoVault as any).conf.maxItemMB * 1048576 })
+    const res = await rt.http.get(videoUrl, {
+      responseType: 'arraybuffer',
+      timeout: 120000,
+      headers: {
+        'User-Agent': CHROME_UA_V,
+        'Referer': 'https://twitter.com/',
+      },
+    })
     const buffer = Buffer.from(res.data)
+    if (buffer.length > maxBytes) {
+      debugLog('WARN', `受限视频 ${videoUrl} 体积 ${(buffer.length / 1048576).toFixed(1)}MB 超限 ${(maxBytes / 1048576).toFixed(0)}MB，降级发链接`)
+      return { kind: 'link', url: videoUrl }
+    }
     const token = videoVault.put({
       requesterId: meta.requesterId,
       buffer,

@@ -72,29 +72,30 @@ export function buildMainElements(rt: ParserRuntime, item: ProcessedItem): h[] {
 }
 
 /**
- * 构建混淆附加消息（第二条）：
- * - 收集所有混淆图片 buffer
- * - 附 token hint（解混淆/取视频引导）
- * - 返回 null 表示无混淆内容（无需第二条）
+ * 构建混淆附加消息（独立两条）：
+ * - 第一条：token hint 文字（引导私聊解码）
+ * - 第二条：所有混淆图片 buffer（群友可直接转发到私聊解码）
+ * 返回 [hintText?, images?] 两个消息（null 则跳过）
  */
-export function buildScrambledMessage(rt: ParserRuntime, item: ProcessedItem, quoteId?: string): h[] | null {
+export function buildScrambledMessages(rt: ParserRuntime, item: ProcessedItem, quoteId?: string): { hintMsg: h[] | null; imgMsg: h[] | null } {
   const scrambledImages = [
     item.avatar, item.cover,
     ...item.images,
   ].filter((img): img is ImageOutcome => img?.kind === 'scrambled' && !!img.buffer)
 
-  if (!scrambledImages.length && item.video.kind !== 'card') return null
-
-  const out: h[] = []
-  if (quoteId) out.push(h.quote(quoteId))
-
-  for (const img of scrambledImages) {
-    out.push(h.image(img!.buffer!, 'image/png'))
+  const hint = buildTokenHint(rt, item)
+  let hintMsg: h[] | null = null
+  if (hint) {
+    hintMsg = [h.text(hint)]
+    if (quoteId) hintMsg.unshift(h.quote(quoteId))
   }
 
-  const hint = buildTokenHint(rt, item)
-  if (hint) out.push(h.text(hint))
-  return out.length ? out : null
+  let imgMsg: h[] | null = null
+  if (scrambledImages.length) {
+    imgMsg = scrambledImages.map((img) => h.image(img!.buffer!, 'image/png'))
+  }
+
+  return { hintMsg, imgMsg }
 }
 
 /** 单条消息是否可行（无视频元素、图片数未超限、无混淆内容） */
@@ -133,14 +134,15 @@ export function buildTokenHint(rt: ParserRuntime, item: ProcessedItem): string {
   return lines.filter(Boolean).join('\n')
 }
 
-/** 单条整合发送（主消息 + 混淆附加消息）；返回是否成功 */
+/** 单条整合发送（主消息 + 混淆 hint + 混淆图，分三条发送以兼容各类适配器）；返回是否成功 */
 export async function sendSingle(rt: ParserRuntime, session: any, item: ProcessedItem, quoteId?: string): Promise<boolean> {
   const mainElements = buildMainElements(rt, item)
-  const scrambledMsg = buildScrambledMessage(rt, item, quoteId)
-  if (!mainElements.length && !scrambledMsg) return true
+  const { hintMsg, imgMsg } = buildScrambledMessages(rt, item, quoteId)
+  if (!mainElements.length && !hintMsg && !imgMsg) return true
   try {
     if (mainElements.length) await sendWithTimeout(rt, session, mainElements)
-    if (scrambledMsg) await sendWithTimeout(rt, session, scrambledMsg)
+    if (hintMsg) await sendWithTimeout(rt, session, hintMsg)
+    if (imgMsg) await sendWithTimeout(rt, session, imgMsg)
     return true
   } catch (e) {
     debugLog('WARN', '单条整合发送失败，回退分条/转发:', e)

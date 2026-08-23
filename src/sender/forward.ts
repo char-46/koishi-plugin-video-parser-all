@@ -63,14 +63,13 @@ export async function sendForward(rt: ParserRuntime, session: any, items: Proces
     }
     if (config.showMusicVoice && p.music.url) nodes.push(buildForwardNode(session, h.audio(p.music.url), botName))
 
-    // 混淆附加节点：所有混淆图 + token 提示，作为转发消息里的独立气泡
+    // 混淆附加：hint 文字与混淆图拆成两个独立气泡（兼容各类适配器）
+    const hint = buildTokenHint(rt, item)
+    if (hint) {
+      nodes.push(buildForwardNode(session, hint, botName))
+    }
     if (scrambledBuffers.length) {
-      const mediaHs = scrambledBuffers.map((buf) => h.image(buf, 'image/png'))
-      const hint = buildTokenHint(rt, item)
-      nodes.push(buildForwardNode(session, [...mediaHs, ...(hint ? [h.text('\n' + hint)] : [])], botName))
-    } else {
-      const hint = buildTokenHint(rt, item)
-      if (hint) nodes.push(buildForwardNode(session, hint, botName))
+      nodes.push(buildForwardNode(session, scrambledBuffers.map((buf) => h.image(buf, 'image/png')), botName))
     }
   }
 
