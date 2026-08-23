@@ -122,6 +122,7 @@ export async function processImage(rt: ParserRuntime, platform: string, url: str
   if (policy.mode === 'smart') hit = await moderateImage(rt, url)
   if (!hit) return { kind: 'raw', url }
 
+  logger.info(`图片命中内容安全策略，动作=${policy.imageAction}（${kind}）: ${url.slice(0, 60)}`)
   if (policy.imageAction === 'drop') return { kind: 'drop' }
   if (policy.imageAction === 'link') return { kind: 'link', url }
   const s = await scrambleImage(rt, url)
@@ -146,6 +147,7 @@ export async function processVideo(rt: ParserRuntime, platform: string, videoUrl
 
   if (!hit) return { kind: 'raw', url: videoUrl }
 
+  logger.info(`视频命中内容安全策略，动作=${policy.videoAction}: ${videoUrl.slice(0, 60)}`)
   if (policy.videoAction === 'drop') return { kind: 'drop' }
   if (policy.videoAction === 'link') return { kind: 'link', url: videoUrl }
 
@@ -167,12 +169,14 @@ export async function processVideo(rt: ParserRuntime, platform: string, videoUrl
       logger.warn(`受限视频 ${videoUrl} 体积 ${(buffer.length / 1048576).toFixed(1)}MB 超限 ${(maxBytes / 1048576).toFixed(0)}MB，降级发链接`)
       return { kind: 'link', url: videoUrl }
     }
+    const sizeMB = +(buffer.length / 1048576).toFixed(1)
     const token = videoVault.put({
       requesterId: meta.requesterId,
       buffer,
       expiresAt: Date.now() + (videoVault as any).conf.ttlMinutes * 60000,
-      meta: { title: meta.title, author: meta.author, platform, sizeMB: +(buffer.length / 1048576).toFixed(1) },
+      meta: { title: meta.title, author: meta.author, platform, sizeMB },
     })
+    logger.info(`受限视频已暂存 ${sizeMB}MB（token=${token.slice(0, 8)}…，绑定请求者 ${meta.requesterId}）`)
     return { kind: 'card', token }
   } catch (e: any) {
       logger.warn(`受限视频暂存失败（降级发链接文字）: ${e?.message || e}`)

@@ -85,6 +85,7 @@ export function apply(ctx: Context, config: any) {
           return '暂存条目已损坏。'
         }
       } catch (e: any) {
+        logger.error('取视频发送失败:', e?.message || e)
         return `视频发送失败：${e?.message || e}。可稍后重试「取视频 <token>」（有效期内可多次领取）。`
       }
     })

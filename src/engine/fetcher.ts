@@ -13,13 +13,16 @@ export async function fetchApi(rt: ParserRuntime, url: string, type: string, fie
   const { config, http, urlCacheLocal, proxyConfig, cacheTTL } = rt
   const cacheKey = url
   const cached = urlCacheLocal.get(cacheKey)
-  if (cached && cached.expire > Date.now()) return cached.data
+  if (cached && cached.expire > Date.now()) {
+    debugLog('缓存命中，直接返回:', url)
+    return cached.data
+  }
 
   const { apiUrl: dedicatedUrl, dedicatedFirst, apiKey, authHeaderType, customHeaderName, customProxy } = platformConf || getPlatformConfig(rt, type)
 
   // X / Twitter：统一网关均走原生 syndication 解析（除非用户自定义了 API）
   if (type === 'twitter' && !dedicatedUrl) {
-    logger.info('twitter 走原生 syndication 解析:', url)
+    debugLog('twitter 走原生 syndication 解析:', url)
     const twCreds = (config.twitterAuthToken && config.twitterCt0)
       ? { authToken: String(config.twitterAuthToken), ct0: String(config.twitterCt0) }
       : undefined
@@ -57,7 +60,7 @@ export async function fetchApi(rt: ParserRuntime, url: string, type: string, fie
 
   const customHeaders = config.customHeaders || []
   let lastError: Error | null = null
-  for (const api of apiList) {
+  for (const [apiIndex, api] of apiList.entries()) {
     for (let attempt = 0; attempt <= config.retryTimes; attempt++) {
       try {
         const headers: any = {
@@ -86,6 +89,9 @@ export async function fetchApi(rt: ParserRuntime, url: string, type: string, fie
         }
         const res = await http.get(api.url, axiosConfigLocal)
         if (res.data && (res.data.code === 200 || res.data.code === 0)) {
+          // 回退链路重要事件：非首个 API 成功说明上游发生了故障切换
+          if (apiIndex > 0) logger.info(`${api.label} 回退解析成功（此前 API 失败）: ${url}`)
+          else debugLog(`${api.label} 解析成功: ${url}`)
           const parsed = parseApiResponse(res.data, config.maxDescLength, api.fieldMapping)
           urlCacheLocal.set(cacheKey, { data: parsed, expire: Date.now() + cacheTTL })
           return parsed

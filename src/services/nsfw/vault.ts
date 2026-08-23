@@ -6,7 +6,7 @@
  * 插件卸载即清空，不落盘。
  */
 import { randomBytes } from 'crypto'
-import { debugLog } from '../../utils/logger'
+import { debugLog, logger } from '../../utils/logger'
 
 export interface VaultEntry {
   requesterId: string
@@ -64,9 +64,19 @@ export class VideoVault {
   redeem(token: string, userId: string): { ok: true; entry: VaultEntry } | { ok: false; reason: 'not-found' | 'expired' | 'forbidden' } {
     this.sweep()
     const stored = this.items.get(String(token || '').trim())
-    if (!stored) return { ok: false, reason: 'not-found' }
-    if (stored.expiresAt <= Date.now()) return { ok: false, reason: 'expired' }
-    if (stored.requesterId !== String(userId)) return { ok: false, reason: 'forbidden' }
+    if (!stored) {
+      logger.warn(`受限视频取件失败（token 无效）: token=${String(token).slice(0, 8)}…，请求者=${userId}`)
+      return { ok: false, reason: 'not-found' }
+    }
+    if (stored.expiresAt <= Date.now()) {
+      logger.warn(`受限视频取件失败（已过期）: token=${String(token).slice(0, 8)}…，请求者=${userId}`)
+      return { ok: false, reason: 'expired' }
+    }
+    if (stored.requesterId !== String(userId)) {
+      logger.warn(`受限视频取件失败（身份不符，疑似冒领）: token=${String(token).slice(0, 8)}…，请求者=${userId}`)
+      return { ok: false, reason: 'forbidden' }
+    }
+    logger.info(`受限视频取件成功: token=${String(token).slice(0, 8)}…，请求者=${userId}`)
     return { ok: true, entry: stored }
   }
 
