@@ -100,4 +100,15 @@ describe('parseApiResponse — 统一解析引擎', () => {
     expect(r.videos[0].quality).toBe('1080p')
     expect(r.video).toBe('https://x/1080.mp4')
   })
+
+  it('响应本身为数组 → 取首个元素（第三方 API 兼容）', () => {
+    const r = parseApiResponse([{ data: { title: '数组响应', url: 'https://x/v.mp4' } }], 200)
+    expect(r.title).toBe('数组响应')
+    expect(r.video).toBe('https://x/v.mp4')
+  })
+
+  it('data 为数组 → 取首个元素', () => {
+    const r = parseApiResponse({ code: 200, data: [{ url: 'https://x/v2.mp4' }] }, 200)
+    expect(r.video).toBe('https://x/v2.mp4')
+  })
 })

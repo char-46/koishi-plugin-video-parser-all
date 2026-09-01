@@ -47,11 +47,11 @@ export const NsfwConfig = Schema.object({
       Schema.const('drop' as const).description('不发送'),
     ]).default('redeem').description('视频命中后的动作（封面送审判定）'),
     scrambleAvatar: Schema.boolean().default(false).description('作者头像也参与混淆（默认跳过）'),
-    tokenHintText: Schema.string().role('textarea').default('检测到可能不适宜的内容，已混淆 ${count} 张图片。如需查看：将图片转发到与机器人的私聊，随消息发送「解混淆 + 取件码」即可还原（取件码见各混淆图消息，群里直接发取件码无效）。').description('首条消息的图片混淆提示文案（占位 ${count}，不含取件码）'),
-    videoCardHint: Schema.string().role('textarea').default('检测到受限视频，未在群内发送。原视频暂存至 ${until}，私聊发送「取视频 + 取件码」领取（取件码见下条消息）。').description('首条消息的受限视频提示文案（占位 ${until} ${ttl}，不含取件码）'),
+    tokenHintText: Schema.string().role('textarea').default('检测到可能不适宜的内容，已混淆 ${count} 张图片。如需查看：将图片转发到与机器人的私聊，随消息发送「解混淆 + 取件码」即可还原（取件码见各混淆图消息，群里直接发取件码无效）。').description('图片混淆提示文案（占位 ${count}）'),
+    videoCardHint: Schema.string().role('textarea').default('检测到受限视频，未在群内发送。原视频暂存至 ${until}，私聊发送「取视频 + 取件码」领取（取件码见下条消息）。').description('受限视频提示文案（占位 ${until} ${ttl}）'),
   }).description('处理策略'),
 
-  nsfwGlobalMode: modeUnion.default('off').description('全平台一刀切模式：off=全部关闭（默认）；full/smart 对所有未显式配置的平台生效（平台级可单独覆盖）'),
+  nsfwGlobalMode: modeUnion.default('off').description('全平台默认处理模式（平台级可覆盖）'),
 
   nsfwPlatformMode: platformModeObject(),
 
@@ -77,7 +77,7 @@ export const NsfwConfig = Schema.object({
       Schema.const('tencent' as const).description('腾讯云'),
       Schema.const('azure' as const).description('Azure Content Safety'),
       Schema.const('custom' as const).description('自定义 REST 模板'),
-    ]).default('baidu').description('内容安全平台（配置有效凭证后启用；启用后平台全量模式自动转为审核判定）'),
+    ]).default('baidu').description('审核服务商（配置有效凭证后生效）'),
     baidu: Schema.object({
       apiKey: Schema.string().role('secret').default('').description('API Key'),
       secretKey: Schema.string().role('secret').default('').description('Secret Key'),
@@ -95,17 +95,17 @@ export const NsfwConfig = Schema.object({
       secretKey: Schema.string().role('secret').default('').description('SecretKey'),
     }).description('腾讯云凭证'),
     azure: Schema.object({
-      endpoint: Schema.string().default('').description('资源地址，如 https://<resource>.cognitiveservices.azure.com'),
-      apiKey: Schema.string().role('secret').default('').description('Ocp-Apim-Subscription-Key 密钥'),
+      endpoint: Schema.string().default('').description('资源地址 https://<resource>.cognitiveservices.azure.com'),
+      apiKey: Schema.string().role('secret').default('').description('Ocp-Apim-Subscription-Key'),
       categories: Schema.array(Schema.union([
         Schema.const('Sexual' as const).description('性内容'),
         Schema.const('Violence' as const).description('暴力'),
         Schema.const('Hate' as const).description('仇恨'),
         Schema.const('SelfHarm' as const).description('自残'),
-      ])).default(['Sexual', 'Violence']).description('送审类别（图像分析支持以上四类）'),
-      severityThreshold: Schema.number().min(0).max(6).step(1).default(2).description('命中阈值：任一类别 severity ≥ 此值判命中（0=全命中 6=几乎不命中）'),
-      blocklistNames: Schema.array(Schema.string()).default([]).description('自定义阻止列表名称（需先在 Azure 门户或管理 API 创建）'),
-    }).description('Azure Content Safety 凭证'),
+      ])).default(['Sexual', 'Violence']).description('送审类别'),
+      severityThreshold: Schema.number().min(0).max(6).step(1).default(2).description('命中阈值（severity ≥ 此值判命中，0 最严 6 最松）'),
+      blocklistNames: Schema.array(Schema.string()).default([]).description('阻止列表名称（需在 Azure 门户预先创建）'),
+    }).description('Azure Content Safety'),
     custom: Schema.object({
       endpoint: Schema.string().default('').description('审核接口地址'),
       method: Schema.union([Schema.const('GET' as const), Schema.const('POST' as const)]).default('POST').description('请求方法'),
@@ -117,10 +117,11 @@ export const NsfwConfig = Schema.object({
   }).description('内容安全审核'),
 
   nsfwVault: Schema.object({
-    ttlMinutes: Schema.number().min(1).default(30).description('受限视频暂存时长（分钟）'),
+    ttlMinutes: Schema.number().min(1).default(30).description('暂存时长（分钟）'),
     maxItems: Schema.number().min(1).default(20).description('暂存条数上限'),
-    maxItemMB: Schema.number().min(1).default(200).description('单条视频体积上限（MB，超限改发链接）'),
+    maxItemMB: Schema.number().min(1).default(200).description('单条体积上限（MB，超限改发链接）'),
     budgetMB: Schema.number().min(1).default(600).description('暂存总预算（MB，LRU 驱逐）'),
+    tokenShare: Schema.boolean().default(true).description('取件码共享：任何持有者可领取（关闭则仅限原请求者）'),
   }).description('受限视频暂存'),
 }).description('内容安全与图片混淆')
 

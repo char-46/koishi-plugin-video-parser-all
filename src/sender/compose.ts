@@ -26,6 +26,8 @@ export interface ProcessedItem {
   avatar: ImageOutcome
   cover: ImageOutcome | null
   video: VideoOutcome
+  /** 推文动图转 GIF 的成品（转换失败为 null，回退发视频） */
+  gif?: Buffer | null
 }
 
 /** 一个待发送的语义单元 */
@@ -88,8 +90,10 @@ export function buildUnits(rt: ParserRuntime, item: ProcessedItem): MessageUnit[
     else if (img.kind === 'link' && img.url) push([h.text(`图片链接：${img.url}`)], true)
   }
 
-  // ⑥ 合规视频（必须独立，含视频自动分条）
-  if (p.video && p.type !== 'live' && p.type !== 'live_photo' && item.video.kind === 'raw' && item.video.url) {
+  // ⑥ 合规视频（必须独立，含视频自动分条）；动图已转 GIF 时以图片形式独立发送
+  if (item.gif) {
+    push([h.image(item.gif, 'image/gif')], false)
+  } else if (p.video && p.type !== 'live' && p.type !== 'live_photo' && item.video.kind === 'raw' && item.video.url) {
     push([config.showVideoFile !== false ? h.video(item.video.url) : h.text(`视频链接：${item.video.url}`)], false)
   }
 

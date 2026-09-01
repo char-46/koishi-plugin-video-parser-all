@@ -16,6 +16,7 @@ import type { LinkMatch } from '../types'
 import { ConcurrencyLimiter } from '../utils/concurrency'
 import { debugLog, logger } from '../utils/logger'
 import { contentFingerprint, getText } from '../utils/common'
+import { mp4ToGif } from '../utils/gif'
 import { getPlatformConfig } from '../platforms/custom'
 import { processSingleUrl } from '../engine/fetcher'
 import { processImage, processVideo } from '../services/nsfw/gate'
@@ -51,7 +52,17 @@ async function processItem(rt: ParserRuntime, session: any, platform: string, te
     ? await processVideo(rt, platform, parsed.video, parsed.cover || '', { title: parsed.title, author: parsed.author, requesterId })
     : { kind: 'raw' as const, url: '' }
 
-  return { text, parsed, images, avatar, cover, video }
+  // 推文动图：按配置转 GIF（仅合规视频；转换失败回退原视频）
+  let gif: Buffer | null = null
+  if (parsed.isGif && video.kind === 'raw' && video.url && rt.config.gifConvertEnabled !== false) {
+    gif = await mp4ToGif(rt, video.url, parsed.duration, {
+      maxWidth: rt.config.gifMaxWidth || 480,
+      fps: rt.config.gifFps || 15,
+      maxDurationSec: rt.config.gifMaxDurationSec || 15,
+    })
+  }
+
+  return { text, parsed, images, avatar, cover, video, gif }
 }
 
 export async function flush(rt: ParserRuntime, session: any, matches: LinkMatch[], opts: FlushOptions = {}) {

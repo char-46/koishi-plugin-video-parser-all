@@ -9,7 +9,7 @@ export const Config = Schema.intersect([
     botName: Schema.string().default('视频解析机器人').description('合并转发中显示的昵称'),
     showWaitingTip: Schema.boolean().default(true).description('显示等待提示'),
     debug: Schema.boolean().default(false).description('调试模式：将 debug/verbose 级别日志提升为 info 输出'),
-    enableDiagCommand: Schema.boolean().default(false).description('启用 parse/diag 环境诊断命令（默认关闭，诊断结果始终会输出到日志）'),
+    enableDiagCommand: Schema.boolean().default(false).description('启用 parse/diag 环境诊断命令'),
     platformEnabled: Schema.object({
       bilibili: Schema.boolean().default(true).description('哔哩哔哩'),
       douyin: Schema.boolean().default(true).description('抖音'),
@@ -44,29 +44,36 @@ export const Config = Schema.intersect([
   Schema.object({
     unifiedMessageFormat: Schema.string().role('textarea').default(
       '标题：${标题}\n作者：${作者}\n简介：${简介}\n音乐标题：${音乐标题}\n音乐作者：${音乐作者}\n点赞：${点赞数}\n收藏：${收藏数}\n转发：${转发数}\n播放：${播放数}\n评论：${评论数}\n图片数量：${图片数量}'
-    ).description('文字格式，支持变量：${标题} ${作者} ${简介} ${视频时长} ${点赞数} ${收藏数} ${转发数} ${播放数} ${评论数} ${发布时间} ${图片数量} ${作者ID} ${音乐标题} ${音乐作者}，空行自动隐藏'),
+    ).description('消息文字模板，可用变量：${标题} ${作者} ${简介} ${视频时长} ${点赞数} ${收藏数} ${转发数} ${播放数} ${评论数} ${发布时间} ${图片数量} ${作者ID} ${音乐标题} ${音乐作者}（空行自动隐藏）'),
   }).description('消息格式'),
 
   Schema.object({
     showImageText: Schema.boolean().default(true).description('发送文字内容'),
     showCoverImage: Schema.boolean().default(true).description('发送封面图片'),
-    showCoverFile: Schema.boolean().default(true).description('封面是否以图片形式发送（关闭则只发送链接）'),
-    showCoverText: Schema.boolean().default(true).description('发送封面前显示文字提示'),
-    coverText: Schema.string().default('封面：').description('封面前显示的文字'),
-    showImageFileNew: Schema.boolean().default(true).description('图片是否以图片形式发送（关闭则只发送链接）'),
-    showAuthorAvatar: Schema.boolean().default(true).description('发送作者头像图片'),
-    showAuthorAvatarFile: Schema.boolean().default(true).description('作者头像图片是否以图片形式发送（关闭则只发送链接）'),
-    showAuthorAvatarText: Schema.boolean().default(true).description('作者头像前显示文字提示（将追加到文字消息末尾）'),
-    authorAvatarText: Schema.string().default('作者头像：').description('作者头像前显示的文字'),
-    showMusicCover: Schema.boolean().default(true).description('发送音乐封面图片'),
-    showVideoFile: Schema.boolean().default(true).description('视频是否以视频形式发送（关闭则只发送链接）'),
-    sendLiveMessage: Schema.boolean().default(true).description('直播作品发送文字消息（不发送视频）'),
+    showCoverFile: Schema.boolean().default(true).description('封面以图片形式发送（关闭则只发链接）'),
+    showCoverText: Schema.boolean().default(true).description('封面图前显示文字提示'),
+    coverText: Schema.string().default('封面：').description('封面提示文字'),
+    showImageFileNew: Schema.boolean().default(true).description('图片以图片形式发送（关闭则只发链接）'),
+    showAuthorAvatar: Schema.boolean().default(true).description('发送作者头像'),
+    showAuthorAvatarFile: Schema.boolean().default(true).description('头像以图片形式发送（关闭则只发链接）'),
+    showAuthorAvatarText: Schema.boolean().default(true).description('头像前显示文字提示'),
+    authorAvatarText: Schema.string().default('作者头像：').description('头像提示文字'),
+    showMusicCover: Schema.boolean().default(true).description('发送音乐封面'),
+    showVideoFile: Schema.boolean().default(true).description('视频以视频形式发送（关闭则只发链接）'),
+    sendLiveMessage: Schema.boolean().default(true).description('直播作品发文字消息（不发视频）'),
   }).description('媒体发送'),
 
   Schema.object({
     showMusicVoice: Schema.boolean().default(false).description('音乐链接以语音形式发送'),
-    showMusicVoiceFile: Schema.boolean().default(true).description('音乐链接是否以语音形式发送（关闭则只发送链接）'),
+    showMusicVoiceFile: Schema.boolean().default(true).description('音乐是否以语音形式发送（关闭则只发送链接）'),
   }).description('音乐语音（需 silk 和 ffmpeg）'),
+
+  Schema.object({
+    gifConvertEnabled: Schema.boolean().default(true).description('推文动图转 GIF 发送（需 ffmpeg，失败回退原视频）'),
+    gifMaxWidth: Schema.number().min(120).max(1080).step(1).default(480).description('GIF 宽度 (px)'),
+    gifFps: Schema.number().min(5).max(30).step(1).default(15).description('GIF 帧率'),
+    gifMaxDurationSec: Schema.number().min(1).max(60).step(1).default(15).description('GIF 时长上限 (s)'),
+  }).description('GIF 转换（需 ffmpeg）'),
 
   Schema.object({
     maxDescLength: Schema.number().min(0).step(1).default(200).description('简介长度上限'),
@@ -243,9 +250,9 @@ export const Config = Schema.intersect([
       '  "music_url": "data.music.url"\n' +
       '}'
     ).description('全局字段映射 JSON'),
-    twitterAuthToken: Schema.string().default('').role('secret').description('X/Twitter 登录态 auth_token（仅解析需登录推文时用；受 Cloudflare 指纹限制，服务端可能 403）'),
-    twitterCt0: Schema.string().default('').role('secret').description('X/Twitter 登录态 ct0（与 auth_token 配对，同时作为 csrf token）'),
-    apiKey: Schema.string().default('').role('secret').description('api-new.ifphp.com 网关 API Key（https://api-new.ifphp.com/auth/login 注册获取）。配置后自动切换到新网关；留空则继续使用旧网关 api.bugpk.com（旧网关将逐步停服）'),
+    twitterAuthToken: Schema.string().default('').role('secret').description('X 登录态 auth_token（解析需登录推文用，受 Cloudflare 指纹限制可能 403）'),
+    twitterCt0: Schema.string().default('').role('secret').description('X 登录态 ct0（与 auth_token 配对）'),
+    apiKey: Schema.string().default('').role('secret').description('新网关 API Key（https://api-new.ifphp.com/auth/login 注册获取；留空用旧网关）'),
   }).description('API 与平台'),
 
   Schema.object({

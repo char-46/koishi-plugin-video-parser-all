@@ -210,6 +210,15 @@ describe('nsfw/vault', () => {
     expect(expired.redeem(te, 'u').ok).toBe(false) // 过期条目不可领取（惰性清扫后 not-found）
   })
 
+  it('tokenShare：共享开启任何持有者可领取，关闭仅限请求者', () => {
+    const v = new VideoVault({ ttlMinutes: 5, maxItems: 5, maxItemMB: 200, budgetMB: 600 })
+    const t = v.put({ requesterId: 'owner', buffer: Buffer.alloc(1), expiresAt: Date.now() + 60000, meta: {} })
+    expect(v.redeem(t, 'other', true).ok).toBe(true)   // 共享：他人可领
+    expect(v.redeem(t, 'other', false).ok).toBe(false) // 关闭：仅请求者
+    expect(v.redeem(t, 'other').ok).toBe(false)        // 默认不共享
+    expect(v.redeem(t, 'owner', false).ok).toBe(true)  // 请求者恒可领
+  })
+
   it('makeScrambleToken：base64url 且可逆（ferret 协议兼容）', () => {
     const rt = rtWith()
     const service = getFerret(rt)!

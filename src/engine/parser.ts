@@ -3,9 +3,12 @@ import { debugLog } from '../utils/logger'
 import { getNestedValue } from '../utils/field-mapping'
 import { pickBestQuality, parseCount } from '../utils/common'
 
-export function parseApiResponse(raw: any, maxDescLen: number, fieldMapping?: Record<string, string>): ParsedData {
+export function parseApiResponse(rawInput: any, maxDescLen: number, fieldMapping?: Record<string, string>): ParsedData {
+  // 兼容：响应本身为数组时取首个元素（部分第三方 API 行为）
+  const raw = Array.isArray(rawInput) ? rawInput[0] : rawInput
   debugLog('API raw response', raw)
-  const data = raw?.data || {}
+  let data: any = raw?.data || {}
+  if (Array.isArray(data)) data = data[0] || {}
   const extra = data.extra || {}
 
   const mapField = (name: string, fallback: () => any) => {

@@ -104,6 +104,7 @@ function extractSyndicationMedia(tw: any, p: ParsedData): void {
             p.video = vs[0].url
             p.cover = String(pick(m.media_url_https, p.cover))
             if (m.video_info.duration_millis) p.duration = Math.floor(Number(m.video_info.duration_millis) / 1000)
+            if (m.type === 'animated_gif') p.isGif = true
           }
         }
       }
@@ -192,6 +193,7 @@ function mapGraphql(rawResult: any): ParsedData {
           p.video = vs[0].url
           p.cover = String(pick(m.media_url_https, p.cover))
           if (m.video_info.duration_millis) p.duration = Math.floor(Number(m.video_info.duration_millis) / 1000)
+          if (m.type === 'animated_gif') p.isGif = true
         }
       }
     }

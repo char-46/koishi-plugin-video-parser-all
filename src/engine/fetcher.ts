@@ -88,7 +88,10 @@ export async function fetchApi(rt: ParserRuntime, url: string, type: string, fie
           } : undefined
         }
         const res = await http.get(api.url, axiosConfigLocal)
-        if (res.data && (res.data.code === 200 || res.data.code === 0)) {
+        // 兼容第三方 API：响应不含 code/status 状态字段时视为成功，直接交由解析器处理
+        const code = res.data?.code
+        const ok = res.data && (code === 200 || code === 0 || (code === undefined && res.data.status === undefined))
+        if (ok) {
           // 回退链路重要事件：非首个 API 成功说明上游发生了故障切换
           if (apiIndex > 0) logger.info(`${api.label} 回退解析成功（此前 API 失败）: ${url}`)
           else debugLog(`${api.label} 解析成功: ${url}`)
@@ -96,7 +99,7 @@ export async function fetchApi(rt: ParserRuntime, url: string, type: string, fie
           urlCacheLocal.set(cacheKey, { data: parsed, expire: Date.now() + cacheTTL })
           return parsed
         }
-        throw new Error(res.data?.msg || `API返回错误码: ${res.data?.code}`)
+        throw new Error(res.data?.msg || res.data?.message || `API返回错误码: ${code ?? res.data?.status}`)
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error))
         debugLog(`${api.label} attempt ${attempt+1} failed: ${lastError.message}`)

@@ -76,11 +76,12 @@ export function apply(ctx: Context, config: any) {
   ctx.command('parse/getvideo <token>', '领取受限暂存视频（仅私聊）').alias('取视频')
     .action(async ({ session }, token) => {
       if (!session) return
-      if (session.guildId) return '该命令仅限私聊使用（凭 token 领取你请求解析的受限视频）。'
+      if (session.guildId) return '该命令仅限私聊使用（凭 token 领取受限视频）。'
       if (!token) return '请提供取件 token。'
-      const result = videoVault.redeem(token, String(session.userId))
+      const tokenShare = config.nsfwVault?.tokenShare !== false
+      const result = videoVault.redeem(token, String(session.userId), tokenShare)
       if (!result.ok) {
-        if (result.reason === 'forbidden') return '该 token 不属于你，无法领取。'
+        if (result.reason === 'forbidden') return '该 token 不属于你，无法领取（管理员未开启取件码共享）。'
         if (result.reason === 'expired') return '暂存已过期，请重新触发解析获取新 token。'
         return 'token 无效或暂存已被清理。'
       }

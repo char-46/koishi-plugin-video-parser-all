@@ -56,6 +56,31 @@ describe('parseTwitter — X 原生 syndication 解析', () => {
     expect(t.play).toBe(999)
   })
 
+  it('动图推文：isGif=true（供发送层转 GIF）', async () => {
+    const gifTweet = {
+      __typename: 'Tweet',
+      text: 'loop!',
+      favorite_count: 1,
+      user: { screen_name: 'g', name: 'G' },
+      mediaDetails: [{
+        type: 'animated_gif',
+        media_url_https: 'https://pbs.twimg.com/poster.jpg',
+        video_info: {
+          duration_millis: 4000,
+          variants: [{ bitrate: 832000, content_type: 'video/mp4', url: 'https://video.twimg.com/gif.mp4' }],
+        },
+      }],
+    }
+    const t = await parseTwitter('https://x.com/u/status/1', mockHttp(gifTweet))
+    expect(t.isGif).toBe(true)
+    expect(t.type).toBe('video')
+    expect(t.duration).toBe(4)
+    const plainVideoTweet = JSON.parse(JSON.stringify(gifTweet))
+    plainVideoTweet.mediaDetails[0].type = 'video'
+    const v = await parseTwitter('https://x.com/u/status/1', mockHttp(plainVideoTweet))
+    expect(v.isGif).toBeUndefined()
+  })
+
   it('tombstone（需登录/已删除）：抛出明确错误', async () => {
     const tomb = { __typename: 'TweetWithVisibilityResults', tombstone: { text: '__FIXME__LYNCHED__FIXME__' } }
     await expect(parseTwitter('https://x.com/u/status/2059244332285313260', mockHttp(tomb as any)))

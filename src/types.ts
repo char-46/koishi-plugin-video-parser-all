@@ -27,6 +27,8 @@ export interface ParsedData {
   author_followers: number
   author_signature: string
   admire: number
+  /** 推文动图（animated_gif）：True 时可按配置转 GIF 发送 */
+  isGif?: boolean
 }
 
 export interface LinkMatch {

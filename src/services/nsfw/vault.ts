@@ -60,8 +60,8 @@ export class VideoVault {
     return token
   }
 
-  /** 取件：校验请求者身份与有效期 */
-  redeem(token: string, userId: string): { ok: true; entry: VaultEntry } | { ok: false; reason: 'not-found' | 'expired' | 'forbidden' } {
+  /** 取件：allowShare 开启时任何持有 token 的用户可领取；否则校验请求者身份 */
+  redeem(token: string, userId: string, allowShare = false): { ok: true; entry: VaultEntry } | { ok: false; reason: 'not-found' | 'expired' | 'forbidden' } {
     this.sweep()
     const stored = this.items.get(String(token || '').trim())
     if (!stored) {
@@ -72,11 +72,12 @@ export class VideoVault {
       logger.warn(`受限视频取件失败（已过期）: token=${String(token).slice(0, 8)}…，请求者=${userId}`)
       return { ok: false, reason: 'expired' }
     }
-    if (stored.requesterId !== String(userId)) {
+    const isOwner = stored.requesterId === String(userId)
+    if (!isOwner && !allowShare) {
       logger.warn(`受限视频取件失败（身份不符，疑似冒领）: token=${String(token).slice(0, 8)}…，请求者=${userId}`)
       return { ok: false, reason: 'forbidden' }
     }
-    logger.info(`受限视频取件成功: token=${String(token).slice(0, 8)}…，请求者=${userId}`)
+    logger.info(`受限视频取件成功${isOwner ? '' : '（共享领取）'}: token=${String(token).slice(0, 8)}…，请求者=${userId}`)
     return { ok: true, entry: stored }
   }
 

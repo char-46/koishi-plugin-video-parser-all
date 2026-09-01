@@ -33,6 +33,35 @@ describe('flush 端到端（mock session + mock http，无需 Koishi bot）', ()
     expect(sentTexts(session._sent).some(t => t.includes('标题：'))).toBe(true)
   })
 
+  it('第三方 API 无状态码字段 → 视为成功（同步上游 v1.6.6）', async () => {
+    const rt = makeRuntime({
+      http: mockHttp(() => ({ data: { title: '无码响应', url: 'https://x/v.mp4' } })),
+    })
+    const session = mockSession()
+    await flush(rt, session as any, [{ type: 'douyin', url: 'https://v.douyin.com/N/', id: 'N' }])
+    expect(sentTexts(session._sent).some(t => t.includes('无码响应'))).toBe(true)
+  })
+
+  it('动图推文（关闭 GIF 转换）：按视频发送', async () => {
+    const gifTweet = {
+      __typename: 'Tweet',
+      text: 'loop',
+      user: { screen_name: 'g', name: 'G' },
+      mediaDetails: [{
+        type: 'animated_gif',
+        media_url_https: 'https://pbs.twimg.com/p.jpg',
+        video_info: { duration_millis: 4000, variants: [{ bitrate: 832000, content_type: 'video/mp4', url: 'https://video.twimg.com/g.mp4' }] },
+      }],
+    }
+    const rt = makeRuntime({
+      config: { gifConvertEnabled: false },
+      http: mockHttp(gifTweet),
+    })
+    const session = mockSession()
+    await flush(rt, session as any, [{ type: 'twitter', url: 'https://x.com/g/status/1', id: '1' }])
+    expect(sentElements(session._sent).some(e => e?.type === 'video')).toBe(true)
+  })
+
   it('图集：图片以独立消息发送', async () => {
     const rt = makeRuntime({
       http: mockHttp({ code: 200, data: { title: '图文标题', images: ['https://x/1.jpg', 'https://x/2.jpg'] } }),
