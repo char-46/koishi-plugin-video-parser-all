@@ -1,8 +1,15 @@
 import { describe, it, expect } from 'vitest'
-import { gifFilter, gifDuration, mp4ToGif } from '../src/utils/gif'
+import { gifFilter, gifDuration, mp4ToGif, resolveFfmpeg } from '../src/utils/gif'
 import { makeRuntime } from './helpers'
 
 describe('gif 工具（推文动图转 GIF）', () => {
+  it('resolveFfmpeg：优先内置静态二进制，回退系统 PATH（结果记忆化）', () => {
+    const p = resolveFfmpeg()
+    expect(typeof p).toBe('string')
+    expect(p.length).toBeGreaterThan(0)
+    expect(resolveFfmpeg()).toBe(p) // 记忆化：两次一致
+  })
+
   it('gifFilter：宽度/帧率边界收敛', () => {
     expect(gifFilter(480, 15)).toContain('fps=15')
     expect(gifFilter(480, 15)).toContain('scale=480:-2')

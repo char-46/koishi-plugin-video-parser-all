@@ -69,11 +69,11 @@ export const Config = Schema.intersect([
   }).description('音乐语音（需 silk 和 ffmpeg）'),
 
   Schema.object({
-    gifConvertEnabled: Schema.boolean().default(true).description('推文动图转 GIF 发送（需 ffmpeg，失败回退原视频）'),
+    gifConvertEnabled: Schema.boolean().default(true).description('推文动图转 GIF 发送（ffmpeg 随插件自动安装，失败回退原视频）'),
     gifMaxWidth: Schema.number().min(120).max(1080).step(1).default(480).description('GIF 宽度 (px)'),
     gifFps: Schema.number().min(5).max(30).step(1).default(15).description('GIF 帧率'),
     gifMaxDurationSec: Schema.number().min(1).max(60).step(1).default(15).description('GIF 时长上限 (s)'),
-  }).description('GIF 转换（需 ffmpeg）'),
+  }).description('GIF 转换'),
 
   Schema.object({
     maxDescLength: Schema.number().min(0).step(1).default(200).description('简介长度上限'),

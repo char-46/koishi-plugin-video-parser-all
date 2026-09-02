@@ -6,7 +6,7 @@
  */
 import { spawn } from 'child_process'
 import type { ParserRuntime } from '../runtime'
-import { logger } from './logger'
+import { debugLog, logger } from './logger'
 
 export interface GifOptions {
   maxWidth: number
@@ -15,6 +15,24 @@ export interface GifOptions {
 }
 
 let ffmpegMissingWarned = false
+
+/**
+ * ffmpeg 路径解析：内置静态二进制（optionalDependency ffmpeg-static，随插件自动安装）
+ * → 系统 PATH。解析结果记忆化，来源记入 debug 日志。
+ */
+let resolvedFfmpeg: string | null = null
+export function resolveFfmpeg(): string {
+  if (resolvedFfmpeg !== null) return resolvedFfmpeg
+  try {
+    const p = require('ffmpeg-static')
+    resolvedFfmpeg = typeof p === 'string' && p ? p : 'ffmpeg'
+    debugLog(`ffmpeg 解析：内置静态二进制 ${resolvedFfmpeg}`)
+  } catch {
+    resolvedFfmpeg = 'ffmpeg'
+    debugLog('ffmpeg 解析：未安装 ffmpeg-static（--no-optional 安装？），回退系统 PATH')
+  }
+  return resolvedFfmpeg
+}
 
 /** 生成 ffmpeg 滤镜串（导出供测试） */
 export function gifFilter(width: number, fps: number): string {
@@ -32,7 +50,7 @@ export function gifDuration(durationSec: number, maxDurationSec: number): number
 
 function runFfmpeg(input: Buffer, vf: string, durationSec: number): Promise<Buffer | null> {
   return new Promise((resolve) => {
-    const child = spawn('ffmpeg', [
+    const child = spawn(resolveFfmpeg(), [
       '-hide_banner', '-loglevel', 'error',
       '-i', 'pipe:0',
       '-t', String(durationSec),
@@ -46,7 +64,7 @@ function runFfmpeg(input: Buffer, vf: string, durationSec: number): Promise<Buff
     child.on('error', (e) => {
       if (!ffmpegMissingWarned) {
         ffmpegMissingWarned = true
-        logger.warn(`GIF 转换需要 ffmpeg（当前环境 PATH 中不可用，动图将回退为视频发送）：${e.message}`)
+        logger.warn(`GIF 转换需要 ffmpeg，但二进制不可用（动图将回退为视频发送）：${e.message}。请安装 optionalDependency ffmpeg-static，或在 PATH 中提供 ffmpeg。`)
       }
       resolve(null)
     })
