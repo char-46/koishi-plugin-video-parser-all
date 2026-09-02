@@ -68,10 +68,14 @@ function runFfmpeg(input: Buffer, vf: string, durationSec: number): Promise<Buff
 /** 下载视频并转 GIF；任何失败返回 null */
 export async function mp4ToGif(rt: ParserRuntime, url: string, durationSec: number, opts: GifOptions): Promise<Buffer | null> {
   try {
+    // X 媒体 CDN (video.twimg.com) 需要浏览器级 UA + Referer 才不会 403（与 vault 下载一致）
     const res = await rt.http.get(url, {
       responseType: 'arraybuffer',
       timeout: Math.min(rt.config.timeout || 60000, 120000),
-      headers: { 'User-Agent': rt.config.userAgent },
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Referer': 'https://twitter.com/',
+      },
     })
     const input = Buffer.from(res.data)
     if (!input.length) return null

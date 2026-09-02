@@ -26,4 +26,14 @@ describe('gif 工具（推文动图转 GIF）', () => {
     const out = await mp4ToGif(rt, 'https://x/v.mp4', 5, { maxWidth: 480, fps: 15, maxDurationSec: 15 })
     expect(out).toBeNull()
   })
+
+  it('mp4ToGif：下载请求带浏览器 UA + Referer（防 video.twimg.com 403 回归）', async () => {
+    const rt: any = makeRuntime()
+    let captured: any = null
+    rt.http = { get: async (_url: string, cfg: any) => { captured = cfg; throw new Error('stop') } }
+    await mp4ToGif(rt, 'https://video.twimg.com/g.mp4', 5, { maxWidth: 480, fps: 15, maxDurationSec: 15 })
+    expect(captured.headers['Referer']).toBe('https://twitter.com/')
+    expect(captured.headers['User-Agent']).toContain('Mozilla/5.0')
+    expect(captured.responseType).toBe('arraybuffer')
+  })
 })
