@@ -6,7 +6,7 @@
  */
 import { spawn } from 'child_process'
 import type { ParserRuntime } from '../runtime'
-import { debugLog, logger } from './logger'
+import { logger } from './logger'
 
 export interface GifOptions {
   maxWidth: number
@@ -51,9 +51,12 @@ function runFfmpeg(input: Buffer, vf: string, durationSec: number): Promise<Buff
       resolve(null)
     })
     child.on('close', (code) => {
-      if (code === 0 && out.length) resolve(Buffer.concat(out))
-      else {
-        debugLog('ffmpeg 转换 GIF 失败:', `code=${code}`, err.slice(0, 200))
+      if (code === 0 && out.length) {
+        const gif = Buffer.concat(out)
+        logger.info(`动图已转 GIF 发送：${Math.round(gif.length / 1024)}KB（源视频 ${Math.round(input.length / 1024)}KB）`)
+        resolve(gif)
+      } else {
+        logger.info(`动图转 GIF 失败，回退发送原视频（ffmpeg 退出码 ${code}${err ? '：' + err.slice(0, 120) : ''}）`)
         resolve(null)
       }
     })
@@ -74,7 +77,7 @@ export async function mp4ToGif(rt: ParserRuntime, url: string, durationSec: numb
     if (!input.length) return null
     return await runFfmpeg(input, gifFilter(opts.maxWidth, opts.fps), gifDuration(durationSec, opts.maxDurationSec))
   } catch (e: any) {
-    debugLog('GIF 源视频下载失败:', e?.message || e)
+    logger.info(`动图 GIF 转换跳过（源视频下载失败，回退发送原视频）：${e?.message || e}`)
     return null
   }
 }
