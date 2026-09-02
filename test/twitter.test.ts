@@ -169,7 +169,7 @@ describe('parseTwitter — 登录态 GraphQL 回退', () => {
   const creds = { authToken: 'tok', ct0: 'ct0val' }
   // syndication 恒返回 tombstone（公开路径不可用）
   const syndicationHttp = { get: async () => ({ data: { __typename: 'TweetTombstone', tombstone: {} } }) }
-  // GraphQL GET 器（第 4 参注入，替代真实 cycletls）
+  // GraphQL GET 器（第 4 参注入，替代真实 tlsget）
   const gqlGet = (payload: any, status = 200) => async () => ({ status, data: payload })
 
   const gqlTweet = {
