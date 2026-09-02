@@ -103,8 +103,8 @@ export function apply(ctx: Context, config: any) {
     })
 
   if (config.enableDiagCommand) {
-    ctx.command('parse/diag', '诊断 X 登录态解析环境（cycletls）').action(async ({ session }) => {
-      await sendWithTimeout(rt, session, '开始诊断 cycletls 环境，约需 30 秒…')
+    ctx.command('parse/diag', '诊断 X 登录态解析环境（tlsget）').action(async ({ session }) => {
+      await sendWithTimeout(rt, session, '开始诊断 tlsget 环境，约需 30 秒…')
       try {
         const lines = await diagnoseTls()
         await sendWithTimeout(rt, session, lines.join('\n'))
@@ -114,13 +114,13 @@ export function apply(ctx: Context, config: any) {
     })
   }
 
-  // 加载时自动体检 cycletls 环境（仅登录态推文需要；未配置凭证则跳过）
+  // 加载时自动体检 tlsget 环境（仅登录态推文需要；未配置凭证则跳过）
   if (config.twitterAuthToken && config.twitterCt0) {
-    ctx.logger.info('检测到 X 登录态凭证，开始 cycletls 环境自检…')
+    ctx.logger.info('检测到 X 登录态凭证，开始 tlsget 环境自检…')
     diagnoseTls().then((lines) => {
-      for (const line of lines) ctx.logger.info(`[cycletls-diag] ${line}`)
+      for (const line of lines) ctx.logger.info(`[tlsget-diag] ${line}`)
     }).catch((e) => {
-      ctx.logger.warn(`[cycletls-diag] 自检异常：${e?.message || e}`)
+      ctx.logger.warn(`[tlsget-diag] 自检异常：${e?.message || e}`)
     })
   }
 

@@ -14,8 +14,8 @@ export type GraphqlGetter = (url: string, opts: { headers?: Record<string, strin
  *
  * ⚠️ 重要限制：X 的 GraphQL 端点受 Cloudflare TLS 指纹校验保护。纯 Node/axios 的
  * TLS 握手(JA3/JA4)与 Chrome 不同，会被 CF 直接 403（cookie 到不了应用层）。
- * 因此登录态回退仅在「TLS 指纹模拟环境」（curl-impersonate / 浏览器 / 代理）下生效；
- * 在普通 Node 中会返回 403 并抛出明确错误。
+ * 因此登录态回退由 tlsget-rs（wreq/BoringSSL，Chrome 指纹）完成；未安装该
+ * 可选依赖时会返回明确错误。
  */
 
 const SYNDICATION_URL = 'https://cdn.syndication.twimg.com/tweet-result'
@@ -245,7 +245,7 @@ async function fetchGraphqlTweet(id: string, creds: TwitterCreds, get: GraphqlGe
   if (res.status === 403 || res.status === 429) {
     throw new Error(
       `X GraphQL 被 Cloudflare 拦截 (HTTP ${res.status})：TLS 指纹校验未通过。` +
-      `请确认已安装可选依赖 cycletls（npm i cycletls），否则服务端 Node 的 TLS 指纹与浏览器不同会被 CF 拒绝。`
+      `请确认已安装可选依赖 @char46/tlsget-rs（npm i @char46/tlsget-rs），它提供浏览器级 TLS 指纹。`
     )
   }
   if (res.status !== 200) {
